@@ -1,0 +1,14 @@
+{
+  "name": "com.actionfit.ai-ci",
+  "version": "1.0.1",
+  "displayName": "AI CI",
+  "description": "Runs shared ActionFit package validation and prepares isolated disposable Unity projects for package tests.",
+  "unity": "6000.2",
+  "author": {
+    "name": "ActionFit"
+  },
+  "dependencies": {
+    "com.actionfit.custompackagemanager": "1.1.65",
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  }
+}
