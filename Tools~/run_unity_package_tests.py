@@ -327,6 +327,24 @@ def parse_nunit(path: Path) -> dict[str, Any]:
             return 0
 
     result = root.attrib.get("result", root.attrib.get("outcome", "")).strip()
+    failed_tests: list[dict[str, str]] = []
+    for test_case in root.iter():
+        if test_case.tag.rsplit("}", 1)[-1] != "test-case":
+            continue
+        outcome = test_case.attrib.get("result", test_case.attrib.get("outcome", "")).strip().lower()
+        if outcome not in {"failed", "failure", "error"}:
+            continue
+        message = ""
+        for child in test_case.iter():
+            if child.tag.rsplit("}", 1)[-1] == "message" and child.text:
+                message = " ".join(child.text.split())
+                break
+        failed_tests.append(
+            {
+                "name": test_case.attrib.get("fullname") or test_case.attrib.get("name") or "unknown test",
+                "message": message,
+            }
+        )
     summary = {
         "result": result,
         "total": integer("total"),
@@ -334,6 +352,8 @@ def parse_nunit(path: Path) -> dict[str, Any]:
         "failed": integer("failed"),
         "skipped": integer("skipped"),
         "inconclusive": integer("inconclusive"),
+        "failedTests": failed_tests[:20],
+        "failedTestsTruncated": len(failed_tests) > 20,
     }
     summary["success"] = summary["failed"] == 0 and result.lower() not in {"failed", "failure", "error"}
     return summary
@@ -473,6 +493,18 @@ def execute(arguments: argparse.Namespace) -> dict[str, Any]:
     if result_error:
         diagnostics.insert(0, diagnostic(result_error, str(target_root)))
     unity_log = read_text(unity_log_path) or unity_output
+    failure_log = unity_log
+    if result_error and result_error.code == "PACKAGE_SHELL_TESTS_FAILED":
+        shell_log = read_text(shell_log_path)
+        if shell_log:
+            failure_log = "[shell.log]\n" + shell_log
+    elif result_error and result_error.code == "PACKAGE_TESTS_FAILED" and nunit_summary:
+        failed_tests = nunit_summary.get("failedTests") or []
+        if failed_tests:
+            failure_log = "\n".join(
+                f"[nunit] {item['name']}: {item['message']}".rstrip()
+                for item in failed_tests
+            )
     success = result_error is None
     exit_code = 0 if success else result_error.exit_code
     code = "PACKAGE_VALIDATION_PASSED" if success else result_error.code
@@ -508,7 +540,7 @@ def execute(arguments: argparse.Namespace) -> dict[str, Any]:
             "shellLog": str(shell_log_path) if shell_log_path.is_file() else "",
         },
         "diagnostics": diagnostics,
-        "logTail": log_tail(unity_log) if not success else [],
+        "logTail": log_tail(failure_log) if not success else [],
     }
     result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result

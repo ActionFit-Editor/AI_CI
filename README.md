@@ -7,7 +7,7 @@ AI CI runs the ActionFit package contract validator from a local Unity project, 
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.5"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.6"
   }
 }
 ```
@@ -90,7 +90,7 @@ The runner finds the exact Unity patch from `ProjectSettings/ProjectVersion.txt`
 - If the package contains `Tests/Editor/*.asmdef`, the package is marked `testables`, only those assemblies run as EditMode tests with the source project's exact `com.unity.test-framework` version, and Unity produces `nunit-results.xml`.
 - If no Editor test assembly exists, the same isolated project performs compile-only validation and succeeds when compilation succeeds.
 - If `Tests/Shell/run-tests.sh` exists, it runs after Unity validation. Windows uses `BASH_EXE` or Git Bash; macOS uses Bash.
-- `result.json`, `unity.log`, optional NUnit XML, and optional `shell.log` share one `runId`. Failed results include a Unity log tail.
+- `result.json`, `unity.log`, optional NUnit XML, and optional `shell.log` share one `runId`. Failed EditMode results include bounded failed-test names and messages, while Shell failures include the bounded `shell.log` tail, so the structured result remains actionable when artifact upload is unavailable.
 - Exit code `0` means success, `1` means package compilation/test validation failed, and `2` means Unity, licensing, dependency resolution, timeout, or runner infrastructure failed.
 
 The source game project and package contents are never copied or modified. The fixture uses local `file:` references, so uncommitted worktree changes are compiled and tested directly. GitHub Actions should call this runner instead of maintaining a second test implementation.
@@ -144,7 +144,7 @@ python Packages/com.actionfit.ai-ci/Tests~/test_run_unity_package_tests.py
 python Packages/com.actionfit.ai-ci/Tests~/test_github_actions.py
 ```
 
-The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, isolated compile/test modes, NUnit interpretation, shell execution, timeout handling, failure classification, workflow/source synchronization, manual read-only triggers, Step Summary rendering, and always-cleanup fixture handoff.
+The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, isolated compile/test modes, actionable NUnit and Shell failure details, timeout handling, failure classification, workflow/source synchronization, manual read-only triggers, Step Summary rendering, and always-cleanup fixture handoff.
 
 ## AI Guide
 

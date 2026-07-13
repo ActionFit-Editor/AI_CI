@@ -45,6 +45,13 @@ def render(title: str, result_path: Path) -> str:
                 f"- **NUnit:** {nunit.get('passed', 0)}/{nunit.get('total', 0)} passed, "
                 f"{nunit.get('failed', 0)} failed, {nunit.get('skipped', 0)} skipped"
             )
+            failed_tests = nunit.get("failedTests") or []
+            if failed_tests:
+                lines.extend(("", "### Failed tests", ""))
+                for item in failed_tests[:20]:
+                    lines.append(f"- `{inline(item.get('name', 'unknown test'))}`: {inline(item.get('message', ''))}")
+                if nunit.get("failedTestsTruncated"):
+                    lines.append("- Additional failed tests were omitted from the summary.")
 
     phases = result.get("phases") or []
     if phases:
@@ -63,6 +70,11 @@ def render(title: str, result_path: Path) -> str:
                 f"- `{inline(item.get('severity', 'error'))}` `{inline(item.get('code'))}`: "
                 f"{inline(item.get('message'))}"
             )
+    log_tail = result.get("logTail") or []
+    if not success and log_tail:
+        lines.extend(("", "### Failure log tail", "", "```text"))
+        lines.extend(inline(item) for item in log_tail[-40:])
+        lines.extend(("```", ""))
     lines.append("")
     return "\n".join(lines)
 

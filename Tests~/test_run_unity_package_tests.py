@@ -149,7 +149,10 @@ class UnityPackageTestRunnerTests(unittest.TestCase):
     def test_parse_nunit_reports_counts_and_failure(self) -> None:
         result_path = self.root / "nunit.xml"
         result_path.write_text(
-            '<test-run result="Failed" total="3" passed="2" failed="1" skipped="0" inconclusive="0" />',
+            '<test-run result="Failed" total="3" passed="2" failed="1" skipped="0" inconclusive="0">'
+            '<test-suite><test-case name="fails" fullname="Target.Tests.fails" result="Failed">'
+            '<failure><message>Expected true but was false</message></failure>'
+            '</test-case></test-suite></test-run>',
             encoding="utf-8",
         )
 
@@ -158,6 +161,10 @@ class UnityPackageTestRunnerTests(unittest.TestCase):
         self.assertFalse(summary["success"])
         self.assertEqual(3, summary["total"])
         self.assertEqual(1, summary["failed"])
+        self.assertEqual(
+            [{"name": "Target.Tests.fails", "message": "Expected true but was false"}],
+            summary["failedTests"],
+        )
 
     def test_execute_without_tests_compiles_and_cleans_fixture(self) -> None:
         def fake_process(command: list[str], cwd: Path, timeout: int) -> object:
@@ -181,7 +188,10 @@ class UnityPackageTestRunnerTests(unittest.TestCase):
         def fake_process(command: list[str], cwd: Path, timeout: int) -> object:
             Path(command[command.index("-logFile") + 1]).write_text("Test run finished", encoding="utf-8")
             Path(command[command.index("-testResults") + 1]).write_text(
-                '<test-run result="Failed" total="1" passed="0" failed="1" skipped="0" />',
+                '<test-run result="Failed" total="1" passed="0" failed="1" skipped="0">'
+                '<test-case name="fails" fullname="Target.Tests.fails" result="Failed">'
+                '<failure><message>Expected true but was false</message></failure>'
+                '</test-case></test-run>',
                 encoding="utf-8",
             )
             return RUNNER.ProcessOutcome(2, "", "", 2.0)
@@ -193,6 +203,7 @@ class UnityPackageTestRunnerTests(unittest.TestCase):
         self.assertEqual(1, result["exitCode"])
         self.assertEqual("PACKAGE_TESTS_FAILED", result["code"])
         self.assertEqual(1, result["summary"]["nunit"]["failed"])
+        self.assertIn("[nunit]", result["logTail"][0])
 
     def test_shell_failure_is_a_package_failure_and_writes_log(self) -> None:
         script = self.package / "Tests/Shell/run-tests.sh"
@@ -216,6 +227,8 @@ class UnityPackageTestRunnerTests(unittest.TestCase):
         self.assertEqual("PACKAGE_SHELL_TESTS_FAILED", result["code"])
         self.assertEqual(1, result["exitCode"])
         self.assertIn("shell output", (self.root / "results/shell.log").read_text(encoding="utf-8"))
+        self.assertIn("[shell.log]", result["logTail"][0])
+        self.assertTrue(any("shell error" in line for line in result["logTail"]))
 
 
 if __name__ == "__main__":

@@ -68,12 +68,21 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
                         "message": "tests failed",
                         "summary": {
                             "mode": "editmode",
-                            "nunit": {"total": 2, "passed": 1, "failed": 1, "skipped": 0},
+                            "nunit": {
+                                "total": 2,
+                                "passed": 1,
+                                "failed": 1,
+                                "skipped": 0,
+                                "failedTests": [
+                                    {"name": "Target.Tests.fails", "message": "Expected true but was false"}
+                                ],
+                            },
                         },
                         "phases": [{"name": "unity", "status": "failed", "durationSeconds": 1.2}],
                         "diagnostics": [
                             {"severity": "error", "code": "PACKAGE_TESTS_FAILED", "message": "one failed"}
                         ],
+                        "logTail": ["[nunit] Target.Tests.fails: Expected true but was false"],
                     },
                     ensure_ascii=False,
                 ),
@@ -101,6 +110,8 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
             self.assertIn("❌ failed", summary)
             self.assertIn("1/2 passed", summary)
             self.assertIn("PACKAGE_TESTS_FAILED", summary)
+            self.assertIn("Target.Tests.fails", summary)
+            self.assertIn("Failure log tail", summary)
 
     def test_unity_wrapper_writes_shared_shape_when_preflight_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

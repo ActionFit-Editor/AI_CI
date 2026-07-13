@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.5`
+- Current package version at generation time: `1.0.6`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -85,7 +85,7 @@ Read this file when:
 - Discover test assemblies only from asmdefs beneath the target package's `Tests/Editor`. Keep the target package in the fixture manifest's `testables`, add the source manifest's exact `com.unity.test-framework` version, pass only the discovered assembly names to Unity's EditMode runner, and write NUnit XML. PlayMode and player/mobile builds are outside this command.
 - When no Editor test assembly exists, run Unity import/compilation with `-batchmode -nographics -quit`; this is a successful compile-only result when Unity exits cleanly.
 - Run `Tests/Shell/run-tests.sh` only when that exact path exists and only after Unity validation succeeds. Use `BASH_EXE` or Git Bash on Windows and Bash on macOS.
-- Keep one `runId` across `result.json`, `unity.log`, optional `nunit-results.xml`, optional `shell.log`, fixture path, and result directory. Failed results include a bounded Unity log tail.
+- Keep one `runId` across `result.json`, `unity.log`, optional `nunit-results.xml`, optional `shell.log`, fixture path, and result directory. Failed EditMode results include bounded failed-test names and messages, Shell failures include a bounded `shell.log` tail, and other failures include a bounded Unity log tail so Step Summary remains actionable when artifact storage is unavailable.
 - Exit `0` for success, `1` for package compiler/EditMode/shell failures, and `2` for missing Unity/Bash, licensing, dependency resolution, timeout, malformed/missing runner output, or other infrastructure failures.
 - Result fields and codes are automation contracts. Preserve `schemaVersion`, `tool`, `runId`, `packageId`, `success`, `exitCode`, `code`, `unityVersion`, `observedUnityVersion`, `phases`, `summary`, `artifacts`, `diagnostics`, and `logTail` when extending the runner.
 
