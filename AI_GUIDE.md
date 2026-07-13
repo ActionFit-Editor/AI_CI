@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.8`
+- Current package version at generation time: `1.0.9`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -102,6 +102,18 @@ Read this file when:
 - The Unity wrapper must run repository preflight first, prepare read-only package access in job scope, create a short marker-owned `RUNNER_TEMP/afci.*` root so macOS Bee IPC sockets remain below the platform path limit, export `PACKAGE_CI_FIXTURE_ROOT`, and leave final cleanup to an `if: always()` step. Cleanup must continue accepting the legacy `RUNNER_TEMP/actionfit-unity-package-ci-*` prefix for in-flight compatibility.
 - The plan and both validation matrices write GitHub Step Summary output and attempt to keep package-distinguishable JSON/log artifacts. Unity additionally attempts to preserve NUnit XML and shell output when produced. Artifact upload steps must use `continue-on-error: true` so storage quota or service failures do not override a successful validation or block the dependent Unity job. Validation, preflight, and cleanup failures remain blocking. Infrastructure fallback JSON must keep the Unity runner schema.
 - A real Unity workflow run depends on the externally provisioned dedicated runner described by `Docs/AI/tools/unity-package-ci-runner.md`; repository code does not create the OS user, runner registration, Unity license, or token.
+
+## Pull Request Merge Gate Contract
+
+- The stable final status context is `Advisory package validation result`. Manual policy and branch protection must target only this aggregate context, never dynamic matrix job names.
+- Installing or applying AI CI workflow assets does not edit repository branch protection or rulesets. Those external settings require a separate, explicit repository-owner decision.
+- When protected branches are unavailable, consuming projects may treat the final context as a manual merge gate: do not merge until it completes successfully.
+- Exit code `1` and static, compiler, EditMode, or Shell failures are package failures owned by the package author. Inspect the package job Step Summary first, then its structured artifact and logs when available. Never bypass a package failure.
+- Exit code `2`, a queued/offline runner, preflight, package-access, licensing, timeout, or malformed-result failure is infrastructure owned by the CI or runner operator. Recover the environment and rerun the same commit; do not change package behavior only to hide infrastructure failure.
+- Artifact upload failure remains non-blocking when validation and cleanup succeeded. Step Summary and bounded `logTail` diagnostics remain the fallback evidence.
+- A manual merge exception is permitted only for a documented infrastructure outage after equivalent local static and isolated Unity validation succeeds and the repository owner explicitly approves the exception on the pull request. It is never valid for package failure.
+- When branch protection becomes available, require the same final context only after a package PR and a no-package PR both prove that it terminates. Preserve unrelated branch settings.
+- Required-check rollback removes only the final required context and leaves the workflow installed as Advisory. Re-enable it after runner recovery and a trusted successful rerun. Never redirect package validation to `unity-mobile` as rollback.
 
 ## API And Menu Rules
 

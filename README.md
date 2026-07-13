@@ -7,7 +7,7 @@ AI CI runs the ActionFit package contract validator from a local Unity project, 
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.8"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.9"
   }
 }
 ```
@@ -111,7 +111,21 @@ The same workflow also runs as a non-required Advisory check for `pull_request` 
 - The Unity job runs the repository preflight before credentials or package code, prepares only job-scoped read access, and calls runner cleanup under `if: always()`.
 - The Unity wrapper creates a short marker-owned `RUNNER_TEMP/afci.*` root for its fixture so Unity Bee IPC sockets remain below the macOS domain-socket path limit.
 
-The Unity job requires the dedicated runner and local read-only package token described in `Docs/AI/tools/unity-package-ci-runner.md` in this project. It intentionally does not use the `unity-mobile` runner, mobile signing/deployment secrets, `pull_request_target`, Required Checks, or package publishing. Until that external runner is provisioned and online, the static job can run but the Unity job will remain queued.
+The Unity job requires the dedicated runner and local read-only package token described in `Docs/AI/tools/unity-package-ci-runner.md` in this project. It intentionally does not use the `unity-mobile` runner, mobile signing/deployment secrets, `pull_request_target`, or package publishing. The workflow does not configure repository branch protection by itself. Until the external runner is provisioned and online, the static job can run but the Unity job will remain queued.
+
+## Pull Request Merge Gate Operations
+
+The stable final check name is `Advisory package validation result`. Require or manually enforce only this final aggregate check, not the package-specific matrix job names, because matrix membership changes with each pull request.
+
+When repository branch protection is unavailable, use the workflow as a manual merge gate:
+
+- Do not merge a pull request targeting the integration branch until `Advisory package validation result` completes successfully.
+- A package failure has exit code `1` or a failed static, compiler, EditMode, or Shell result. The package author owns the correction. Open the failed package job, read its Step Summary, then inspect its JSON/log/NUnit artifact when available. Do not bypass a package failure.
+- An infrastructure failure has exit code `2`, a queued/offline runner, preflight or package-access failure, Unity licensing failure, timeout, or malformed/missing runner result. The CI or runner operator owns recovery. Restore the runner or dependency access and rerun the same commit instead of changing package behavior merely to make CI green.
+- Artifact upload quota or storage failure is non-blocking when validation and cleanup succeeded. Use the Step Summary and bounded `logTail` diagnostics, then retry artifact retention after storage recovers.
+- A temporary merge exception may be considered only for a documented infrastructure outage, after equivalent local static and isolated Unity validation succeeds and the repository owner explicitly approves it. Record the reason and evidence on the pull request. Never use this exception for a package failure.
+
+If the repository later supports protected branches or rulesets, promote the same `Advisory package validation result` context to Required after confirming a package PR and a no-package PR both finish without a pending check. Preserve unrelated branch settings. To roll back during a runner incident, remove only this required context and keep the workflow installed as Advisory; restore the context after the runner recovers and a trusted rerun succeeds. Never reroute package validation to `unity-mobile` as a rollback.
 
 ## Unity Editor API
 
