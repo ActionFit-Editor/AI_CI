@@ -219,6 +219,19 @@ class PrepareUnityProjectTests(unittest.TestCase):
         self.assertFalse(fixture.exists())
 
     @unittest.skipIf(os.name == "nt", "Directory symlink creation is not reliably available on Windows CI")
+    def test_cleanup_rejects_symbolic_link_output(self) -> None:
+        target = self.root / "target"
+        target.mkdir()
+        link = self.root / "fixture-link"
+        link.symlink_to(target, target_is_directory=True)
+
+        with self.assertRaises(PREPARE.PreparationError) as context:
+            PREPARE.cleanup_project(link)
+
+        self.assertEqual("CLEANUP_PATH_UNSAFE", context.exception.code)
+        self.assertTrue(target.exists())
+
+    @unittest.skipIf(os.name == "nt", "Directory symlink creation is not reliably available on Windows CI")
     def test_local_package_realpath_escape_is_rejected(self) -> None:
         outside = self.root / "outside"
         outside.mkdir()

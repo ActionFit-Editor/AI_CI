@@ -1,18 +1,27 @@
 # AI CI (`com.actionfit.ai-ci`)
 
-AI CI runs the ActionFit package contract validator from a local Unity project and prepares disposable Unity projects for isolated package compilation and tests. The local CLI, Unity Editor API, disposable-project generator, and future CI callers use the same package sources from the current worktree without contacting a remote runner.
+AI CI runs the ActionFit package contract validator from a local Unity project, prepares disposable Unity projects for isolated package compilation and tests, and ships a manual GitHub Actions workflow that reuses those same engines. Local and CI validation therefore keep the same schemas, diagnostics, and exit codes.
 
 ## Install
 
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.2"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.3"
   }
 }
 ```
 
 Python 3.9 or newer must be available as `python3`, `python`, or the Windows `py -3` launcher. The package depends on `com.actionfit.custompackagemanager`, which owns the shared validation engine.
+
+Installing or updating the package does not modify the consuming repository's `.github` directory. To preview the package-owned files, open `Tools/Package/AI CI/Setup Package CI`. Select `Apply` only after reviewing the Missing/Different/Current list. Apply creates or replaces only these owned targets and preserves unrelated workflows and scripts:
+
+- `.github/workflows/actionfit-package-validation.yml`
+- `.github/scripts/actionfit-ai-ci/run-static-validation.sh`
+- `.github/scripts/actionfit-ai-ci/run-unity-validation.sh`
+- `.github/scripts/actionfit-ai-ci/write-step-summary.py`
+
+Run the menu again after an AI CI package update to preview and explicitly synchronize a newer template. A Different target may contain repository-specific edits, so review it before allowing Apply to overwrite it.
 
 ## Local CLI
 
@@ -86,6 +95,19 @@ The runner finds the exact Unity patch from `ProjectSettings/ProjectVersion.txt`
 
 The source game project and package contents are never copied or modified. The fixture uses local `file:` references, so uncommitted worktree changes are compiled and tested directly. GitHub Actions should call this runner instead of maintaining a second test implementation.
 
+## Manual GitHub Actions Validation
+
+After explicitly applying the setup assets, open GitHub Actions, select `ActionFit Package Validation`, and choose `Run workflow` on a trusted branch. Enter the embedded `package_id`; optionally enter `base_ref` when the static package contract should enforce a version change against that Git ref.
+
+The workflow is manual-only and grants `contents: read`:
+
+- `Static package contract` runs on a GitHub-hosted Ubuntu runner and invokes `Tools~/ai_ci.py`.
+- `Isolated Unity package validation` runs only after the static job succeeds, targets `[self-hosted, macOS, unity-package-ci]`, and invokes `Tools~/run_unity_package_tests.py`.
+- Both jobs append a GitHub Step Summary and retain their JSON and logs for 14 days. The Unity artifact also includes NUnit XML and shell logs when those outputs exist.
+- The Unity job runs the repository preflight before credentials or package code, prepares only job-scoped read access, and calls runner cleanup under `if: always()`.
+
+The Unity job requires the dedicated runner and local read-only package token described in `Docs/AI/tools/unity-package-ci-runner.md` in this project. It intentionally does not use the `unity-mobile` runner, mobile signing/deployment secrets, pull-request triggers, Required Checks, or package publishing. Until that external runner is provisioned and online, the static job can run but the Unity job will remain queued.
+
 ## Unity Editor API
 
 `AiCiPackageValidationApi` is dialog-free and safe for AI connectors or editor automation:
@@ -102,9 +124,12 @@ string json = AiCiPackageValidationApi.ExecuteJson(
 
 `Execute` returns process metadata, a human-readable `Summary`, and the unchanged shared schema in `ResultJson`. `ExecuteJson` returns that shared JSON directly. The API validates the current worktree on disk; it does not create temporary projects, compile packages, run Unity tests, or modify game content.
 
+`AiCiWorkflowSetupApi.Preview()` is read-only and reports the four workflow assets as Missing, Different, or Current. `AiCiWorkflowSetupApi.Apply()` performs the same explicit synchronization as the menu without showing dialogs. Automation must call Preview first and must not infer approval to overwrite Different files.
+
 ## Unity Menu
 
 - `Tools/Package/AI CI/Validate Package` validates the `com.actionfit.*` package containing the current Project selection.
+- `Tools/Package/AI CI/Setup Package CI` previews package-owned GitHub Actions assets and writes them only after explicit Apply confirmation.
 - `Tools/Package/AI CI/README` opens this document.
 
 The menu is a human-facing convenience layer. Automation should call the CLI or `AiCiPackageValidationApi` to avoid dialogs.
@@ -115,9 +140,10 @@ The menu is a human-facing convenience layer. Automation should call the CLI or 
 python Packages/com.actionfit.ai-ci/Tests~/test_ai_ci.py
 python Packages/com.actionfit.ai-ci/Tests~/test_prepare_unity_project.py
 python Packages/com.actionfit.ai-ci/Tests~/test_run_unity_package_tests.py
+python Packages/com.actionfit.ai-ci/Tests~/test_github_actions.py
 ```
 
-The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, isolated compile/test modes, NUnit interpretation, shell execution, timeout handling, and failure classification.
+The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, isolated compile/test modes, NUnit interpretation, shell execution, timeout handling, failure classification, workflow/source synchronization, manual read-only triggers, Step Summary rendering, and always-cleanup fixture handoff.
 
 ## AI Guide
 
@@ -125,4 +151,4 @@ Read `AI_GUIDE.md` before modifying or diagnosing this package in a consuming pr
 
 ## Assembly
 
-- **Editor** (`com.actionfit.ai-ci.Editor`): dialog-free validation API and Unity menu.
+- **Editor** (`com.actionfit.ai-ci.Editor`): dialog-free validation/setup APIs and Unity menu.

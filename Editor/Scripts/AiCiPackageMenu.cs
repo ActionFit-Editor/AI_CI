@@ -10,6 +10,7 @@ namespace ActionFit.AiCi.Editor
         private const string MenuRoot = "Tools/Package/AI CI/";
         private const string ReadmePath = "Packages/com.actionfit.ai-ci/README.md";
         private const int ValidatePriority = 40;
+        private const int SetupPriority = 41;
         private const int ReadmePriority = 90;
 
         [MenuItem(MenuRoot + "Validate Package", false, ValidatePriority)]
@@ -33,6 +34,46 @@ namespace ActionFit.AiCi.Editor
                 UnityEngine.Debug.LogError($"[AI CI] Validation failed: {packageId}\n{result.Summary}");
 
             EditorUtility.DisplayDialog("AI CI", result.Summary, "OK");
+        }
+
+        [MenuItem(MenuRoot + "Setup Package CI", false, SetupPriority)]
+        private static void SetupPackageCi()
+        {
+            AiCiWorkflowSetupResult preview = AiCiWorkflowSetupApi.Preview();
+            if (!preview.Success)
+            {
+                Debug.LogError($"[AI CI] Package CI setup preview failed: {preview.Message}");
+                EditorUtility.DisplayDialog("Setup Package CI", preview.Message, "OK");
+                return;
+            }
+
+            string details = string.Join(
+                "\n",
+                preview.Assets.ConvertAll(asset => $"[{asset.State}] {asset.TargetRelativePath}"));
+            if (preview.IsCurrent)
+            {
+                EditorUtility.DisplayDialog("Setup Package CI", $"Already up to date.\n\n{details}", "OK");
+                return;
+            }
+
+            if (!EditorUtility.DisplayDialog(
+                    "Setup Package CI",
+                    $"Preview the package-owned workflow assets below.\n"
+                    + "Missing files will be created and different files will be overwritten.\n"
+                    + "No changes are made until Apply is selected.\n\n"
+                    + details,
+                    "Apply",
+                    "Cancel"))
+            {
+                return;
+            }
+
+            AiCiWorkflowSetupResult result = AiCiWorkflowSetupApi.Apply();
+            if (result.Success && result.IsCurrent)
+                Debug.Log($"[AI CI] {result.Message}\n{details}");
+            else
+                Debug.LogError($"[AI CI] Package CI setup failed: {result.Message}");
+            EditorUtility.DisplayDialog("Setup Package CI", result.Message, "OK");
         }
 
         [MenuItem(MenuRoot + "README", false, ReadmePriority)]

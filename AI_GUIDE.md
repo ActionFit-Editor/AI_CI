@@ -7,12 +7,12 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.2`
+- Current package version at generation time: `1.0.3`
 - Unity version: `6000.2`
 
 ## Purpose
 
-AI CI exposes local package contract validation and isolated Unity package testing for developers, AI agents, Unity Editor automation, and future GitHub Actions workflows. Contract checks delegate to `com.actionfit.custompackagemanager/Tools~/package_contract_validator.py`; the project generator resolves the current worktree dependency closure; and the test runner compiles the disposable project, runs package EditMode tests, and invokes optional shell tests without modifying the game project.
+AI CI exposes local package contract validation, isolated Unity package testing, and an explicitly installed manual GitHub Actions workflow. Contract checks delegate to `com.actionfit.custompackagemanager/Tools~/package_contract_validator.py`; the project generator resolves the current worktree dependency closure; and both local and workflow entry points reuse the same engines, result schemas, and exit codes without modifying the game project.
 
 ## Project Router Registration
 
@@ -36,11 +36,16 @@ Read this file when:
 - `Tools~/ai_ci.py`: Unity-independent CLI wrapper that locates and invokes the shared validator.
 - `Tools~/prepare_unity_project.py`: cross-platform dependency closure, minimal Unity project preparation, structured results, and marker-guarded cleanup.
 - `Tools~/run_unity_package_tests.py`: cross-platform exact-patch Unity discovery, isolated compilation/EditMode execution, optional shell tests, artifacts, timeout handling, and result classification.
+- `WorkflowTemplates/actionfit-package-validation.yml`: package-owned manual workflow source with separate static and dedicated Unity jobs.
+- `.github/scripts/actionfit-ai-ci/`: package-owned workflow wrappers and GitHub Step Summary renderer; the setup API copies these into the consuming repository only on explicit Apply.
 - `Editor/Scripts/AiCiPackageValidationApi.cs`: dialog-free Unity Editor API and JSON entry point.
-- `Editor/Scripts/AiCiPackageMenu.cs`: selected-package validation and README menu commands.
+- `Editor/Scripts/AiCiWorkflowSetupApi.cs`: read-only workflow preview plus explicit synchronization API for the four owned repository assets.
+- `Editor/Scripts/AiCiPackageMenu.cs`: selected-package validation, workflow setup, and README menu commands.
+- `Tests/Editor/AiCiWorkflowSetupServiceTests.cs`: preview, explicit apply, overwrite boundary, and no-partial-write regression tests.
 - `Tests~/test_ai_ci.py`: local CLI and result-contract regression tests.
 - `Tests~/test_prepare_unity_project.py`: local/catalog/Registry closure, path safety, manifest, and cleanup regression tests.
 - `Tests~/test_run_unity_package_tests.py`: compile-only, EditMode, NUnit, shell, timeout, artifact, and package-versus-infrastructure regression tests.
+- `Tests~/test_github_actions.py`: package/root template parity, workflow security, Step Summary, fallback result, and fixture cleanup handoff tests.
 - `Editor/PackageInfo/ActionFitPackageInfo_SO.asset`: package catalog metadata and single-version release notes.
 
 ## Validation Contract
@@ -84,12 +89,25 @@ Read this file when:
 - Exit `0` for success, `1` for package compiler/EditMode/shell failures, and `2` for missing Unity/Bash, licensing, dependency resolution, timeout, malformed/missing runner output, or other infrastructure failures.
 - Result fields and codes are automation contracts. Preserve `schemaVersion`, `tool`, `runId`, `packageId`, `success`, `exitCode`, `code`, `unityVersion`, `observedUnityVersion`, `phases`, `summary`, `artifacts`, `diagnostics`, and `logTail` when extending the runner.
 
+## GitHub Actions Workflow Contract
+
+- Package installation or update must never write `.github` automatically. `AiCiWorkflowSetupApi.Preview` and `Tools/Package/AI CI/Setup Package CI` show Missing/Different/Current first; only explicit `Apply` may synchronize the fixed workflow and three fixed scripts.
+- Treat `WorkflowTemplates/actionfit-package-validation.yml` and package `.github/scripts/actionfit-ai-ci/*` as the sources of truth. The repository-root copies must remain byte-identical after synchronization.
+- Keep the trigger `workflow_dispatch` only, with required `package_id` and optional `base_ref`. Do not add `pull_request`, Required Check, schedule, package publishing, deployment, or automatic package-install triggers without separate approval.
+- Keep top-level permissions at `contents: read`, checkout credentials non-persistent, and run only trusted selected refs.
+- Static validation runs on `ubuntu-latest` through `Tools~/ai_ci.py`. Unity validation runs only after static success on `[self-hosted, macOS, unity-package-ci]` through `Tools~/run_unity_package_tests.py`; never route it to `unity-mobile`.
+- The Unity wrapper must run repository preflight first, prepare read-only package access in job scope, place its fixture root under the controlled `RUNNER_TEMP/actionfit-unity-package-ci-*` prefix, export `PACKAGE_CI_FIXTURE_ROOT`, and leave final cleanup to an `if: always()` step.
+- Both jobs keep JSON/log artifacts and write GitHub Step Summary output. Unity additionally preserves NUnit XML and shell output when produced. Infrastructure fallback JSON must keep the Unity runner schema.
+- A real Unity workflow run depends on the externally provisioned dedicated runner described by `Docs/AI/tools/unity-package-ci-runner.md`; repository code does not create the OS user, runner registration, Unity license, or token.
+
 ## API And Menu Rules
 
 - `AiCiPackageValidationApi` is the public dialog-free API for Unity connectors and editor automation.
 - `AiCiPackageValidationApi.ExecuteJson` returns the shared engine JSON directly, including infrastructure failures.
+- `AiCiWorkflowSetupApi.Preview` is read-only. `Apply` writes only the four fixed package-owned targets and must be called only after explicit overwrite approval for Different files.
 - The Editor API may start Python but must not start Unity, create a temporary project, compile packages, run Unity tests, or modify project content.
 - `Tools/Package/AI CI/Validate Package` is a human-facing selected-package command. Keep UI dialogs in the menu layer, never in the API.
+- `Tools/Package/AI CI/Setup Package CI` must show a preview and separate Apply confirmation; installing the package is not setup approval.
 - Keep executable commands above the separated `README` entry under `Tools/Package/AI CI/`.
 
 ## Editing And Verification
@@ -99,6 +117,7 @@ Read this file when:
 - Run `python Packages/com.actionfit.ai-ci/Tests~/test_ai_ci.py` after CLI or result presentation changes.
 - Run `python Packages/com.actionfit.ai-ci/Tests~/test_prepare_unity_project.py` after dependency closure, project layout, path guard, or cleanup changes.
 - Run `python Packages/com.actionfit.ai-ci/Tests~/test_run_unity_package_tests.py` after Unity command, test discovery, shell, artifact, timeout, or failure-classification changes.
+- Run `python Packages/com.actionfit.ai-ci/Tests~/test_github_actions.py`, `actionlint`, and `shellcheck` after workflow/template/wrapper changes.
 - Run `python Packages/com.actionfit.custompackagemanager/Tools~/package_contract_validator.py --package com.actionfit.ai-ci` before finishing.
 - Run the consuming project's AI documentation validator when package files change.
 - Unity compilation and tests are separate from this package's contract validation and must be reported separately.
@@ -107,6 +126,7 @@ Read this file when:
 
 - Unity menu root: `Tools/Package/AI CI/`.
 - `Validate Package`: validates the selected embedded `com.actionfit.*` package.
+- `Setup Package CI`: previews and explicitly synchronizes the package-owned manual workflow and helper scripts into the consuming repository.
 - `README`: opens this package README.
 - Keep this package in the executable-tools priority band.
 

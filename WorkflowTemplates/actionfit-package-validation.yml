@@ -1,0 +1,112 @@
+name: ActionFit Package Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_id:
+        description: Embedded ActionFit package ID to validate
+        required: true
+        type: string
+      base_ref:
+        description: Optional Git ref used for package version enforcement
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actionfit-package-validation-${{ github.ref }}-${{ inputs.package_id }}
+  cancel-in-progress: false
+
+env:
+  ACTIONFIT_AI_CI_ARTIFACT_ROOT: .artifacts/actionfit-ai-ci
+
+jobs:
+  static-validation:
+    name: Static package contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted ref
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run package contract validation
+        env:
+          PACKAGE_ID: ${{ inputs.package_id }}
+          BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          bash .github/scripts/actionfit-ai-ci/run-static-validation.sh \
+            "$GITHUB_WORKSPACE" \
+            "$PACKAGE_ID" \
+            "$BASE_REF" \
+            "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/static"
+
+      - name: Write static validation summary
+        if: always()
+        run: |
+          python3 .github/scripts/actionfit-ai-ci/write-step-summary.py \
+            --title "Static package contract" \
+            --result "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/static/result.json"
+
+      - name: Upload static validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actionfit-ai-ci-static-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/static
+          if-no-files-found: warn
+          retention-days: 14
+
+  unity-validation:
+    name: Isolated Unity package validation
+    needs: static-validation
+    if: needs.static-validation.result == 'success'
+    runs-on: [self-hosted, macOS, unity-package-ci]
+    steps:
+      - name: Checkout trusted ref
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          clean: true
+
+      - name: Run isolated Unity validation
+        env:
+          PACKAGE_ID: ${{ inputs.package_id }}
+        run: |
+          bash .github/scripts/actionfit-ai-ci/run-unity-validation.sh \
+            "$GITHUB_WORKSPACE" \
+            "$PACKAGE_ID" \
+            "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity"
+
+      - name: Clean package runner job state
+        if: always()
+        run: |
+          mkdir -p "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity"
+          bash Tools/AI/unity-package-ci/cleanup-runner-job.sh \
+            2>&1 | tee "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/cleanup.log"
+
+      - name: Write Unity validation summary
+        if: always()
+        run: |
+          python3 .github/scripts/actionfit-ai-ci/write-step-summary.py \
+            --title "Isolated Unity package validation" \
+            --result "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/result/result.json"
+
+      - name: Upload Unity validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actionfit-ai-ci-unity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/unity
+          if-no-files-found: warn
+          retention-days: 14

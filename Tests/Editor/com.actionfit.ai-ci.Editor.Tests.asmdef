@@ -1,0 +1,23 @@
+{
+  "name": "com.actionfit.ai-ci.Editor.Tests",
+  "rootNamespace": "ActionFit.AiCi.Editor.Tests",
+  "references": [
+    "com.actionfit.ai-ci.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

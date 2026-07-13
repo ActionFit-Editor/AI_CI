@@ -284,7 +284,7 @@ def read_unity_version(repo_root: Path, override: str | None) -> tuple[str, str 
 
 
 def validate_output_path(output_path: Path, repo_root: Path) -> Path:
-    output = output_path.expanduser().absolute()
+    output = output_path.expanduser().resolve()
     if output.exists():
         raise PreparationError(
             "OUTPUT_ALREADY_EXISTS",
@@ -366,11 +366,16 @@ def prepare_project(
 
 
 def cleanup_project(output_path: Path) -> dict[str, Any]:
-    output = output_path.expanduser().absolute()
+    requested_output = output_path.expanduser().absolute()
+    if requested_output.is_symlink():
+        raise PreparationError(
+            "CLEANUP_PATH_UNSAFE",
+            f"Cleanup path is a symbolic link: {requested_output}",
+            str(requested_output),
+        )
+    output = requested_output.resolve()
     if not output.is_dir():
         raise PreparationError("FIXTURE_NOT_FOUND", f"Fixture directory was not found: {output}", str(output))
-    if normalize_path(output) != os.path.normcase(str(output)):
-        raise PreparationError("CLEANUP_PATH_UNSAFE", f"Cleanup path resolves through a link: {output}", str(output))
     marker_path = output / MARKER_FILE
     marker = read_json(marker_path, "FIXTURE_MARKER_MISSING")
     if marker.get("tool") != TOOL_NAME:
@@ -379,7 +384,8 @@ def cleanup_project(output_path: Path) -> dict[str, Any]:
             f"Cleanup marker is not owned by {TOOL_NAME}: {marker_path}",
             str(marker_path),
         )
-    if os.path.normcase(str(marker.get("projectPath", ""))) != os.path.normcase(str(output)):
+    marker_project_path = Path(str(marker.get("projectPath", ""))).expanduser().resolve()
+    if normalize_path(marker_project_path) != normalize_path(output):
         raise PreparationError(
             "FIXTURE_MARKER_INVALID",
             f"Cleanup marker projectPath does not match {output}.",
