@@ -39,6 +39,7 @@ namespace ActionFit.AiCi.Editor
         private static readonly (string Source, string Target)[] AssetPaths =
         {
             ("WorkflowTemplates/actionfit-package-validation.yml", ".github/workflows/actionfit-package-validation.yml"),
+            (".github/scripts/actionfit-ai-ci/plan-package-validation.py", ".github/scripts/actionfit-ai-ci/plan-package-validation.py"),
             (".github/scripts/actionfit-ai-ci/run-static-validation.sh", ".github/scripts/actionfit-ai-ci/run-static-validation.sh"),
             (".github/scripts/actionfit-ai-ci/run-unity-validation.sh", ".github/scripts/actionfit-ai-ci/run-unity-validation.sh"),
             (".github/scripts/actionfit-ai-ci/write-step-summary.py", ".github/scripts/actionfit-ai-ci/write-step-summary.py"),

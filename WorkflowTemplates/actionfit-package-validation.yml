@@ -12,25 +12,95 @@ on:
         required: false
         default: ""
         type: string
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
 
 concurrency:
-  group: actionfit-package-validation-${{ github.ref }}-${{ inputs.package_id }}
-  cancel-in-progress: false
+  group: actionfit-package-validation-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.package_id || 'changed-packages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   ACTIONFIT_AI_CI_ARTIFACT_ROOT: .artifacts/actionfit-ai-ci
 
 jobs:
-  static-validation:
-    name: Static package contract
+  plan-validation:
+    name: Plan package validation
     runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.plan.outputs.packages }}
+      package_count: ${{ steps.plan.outputs.package_count }}
+      base_ref: ${{ steps.plan.outputs.base_ref }}
+      self_hosted_allowed: ${{ steps.runner-boundary.outputs.self_hosted_allowed }}
     steps:
-      - name: Checkout trusted ref
+      - name: Checkout candidate head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve self-hosted runner boundary
+        id: runner-boundary
+        env:
+          SELF_HOSTED_ALLOWED: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
+        run: echo "self_hosted_allowed=$SELF_HOSTED_ALLOWED" >> "$GITHUB_OUTPUT"
+
+      - name: Detect ActionFit packages
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_PACKAGE_ID: ${{ inputs.package_id }}
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || inputs.base_ref }}
+        run: |
+          python3 .github/scripts/actionfit-ai-ci/plan-package-validation.py \
+            --event "$EVENT_NAME" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --package "$MANUAL_PACKAGE_ID" \
+            --base-ref "$BASE_REF" \
+            --output "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/plan/result.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Write package plan summary
+        if: always()
+        run: |
+          python3 .github/scripts/actionfit-ai-ci/write-step-summary.py \
+            --title "ActionFit package validation plan" \
+            --result "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/plan/result.json"
+
+      - name: Upload package plan artifact
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: actionfit-ai-ci-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/plan
+          if-no-files-found: warn
+          retention-days: 14
+
+  static-validation:
+    name: Static package contract (${{ matrix.package }})
+    needs: plan-validation
+    if: >-
+      needs.plan-validation.result == 'success' &&
+      needs.plan-validation.outputs.package_count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.plan-validation.outputs.packages) }}
+    steps:
+      - name: Checkout candidate head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
 
@@ -41,74 +111,128 @@ jobs:
 
       - name: Run package contract validation
         env:
-          PACKAGE_ID: ${{ inputs.package_id }}
-          BASE_REF: ${{ inputs.base_ref }}
+          PACKAGE_ID: ${{ matrix.package }}
+          BASE_REF: ${{ needs.plan-validation.outputs.base_ref }}
         run: |
           bash .github/scripts/actionfit-ai-ci/run-static-validation.sh \
             "$GITHUB_WORKSPACE" \
             "$PACKAGE_ID" \
             "$BASE_REF" \
-            "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/static"
+            "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/static/$PACKAGE_ID"
 
       - name: Write static validation summary
         if: always()
+        env:
+          PACKAGE_ID: ${{ matrix.package }}
         run: |
           python3 .github/scripts/actionfit-ai-ci/write-step-summary.py \
-            --title "Static package contract" \
-            --result "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/static/result.json"
+            --title "Static package contract: $PACKAGE_ID" \
+            --result "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/static/$PACKAGE_ID/result.json"
 
       - name: Upload static validation artifacts
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: actionfit-ai-ci-static-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/static
+          name: actionfit-ai-ci-static-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/static/${{ matrix.package }}
           if-no-files-found: warn
           retention-days: 14
 
   unity-validation:
-    name: Isolated Unity package validation
-    needs: static-validation
-    if: needs.static-validation.result == 'success'
+    name: Isolated Unity package validation (${{ matrix.package }})
+    needs: [plan-validation, static-validation]
+    if: >-
+      needs.plan-validation.outputs.package_count != '0' &&
+      needs.plan-validation.outputs.self_hosted_allowed == 'true' &&
+      needs.static-validation.result == 'success'
     runs-on: [self-hosted, macOS, unity-package-ci]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: ${{ fromJSON(needs.plan-validation.outputs.packages) }}
     steps:
-      - name: Checkout trusted ref
+      - name: Checkout candidate head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
           clean: true
 
       - name: Run isolated Unity validation
         env:
-          PACKAGE_ID: ${{ inputs.package_id }}
+          PACKAGE_ID: ${{ matrix.package }}
         run: |
           bash .github/scripts/actionfit-ai-ci/run-unity-validation.sh \
             "$GITHUB_WORKSPACE" \
             "$PACKAGE_ID" \
-            "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity"
+            "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/$PACKAGE_ID"
 
       - name: Clean package runner job state
         if: always()
         run: |
-          mkdir -p "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity"
+          mkdir -p "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/${{ matrix.package }}"
           bash Tools/AI/unity-package-ci/cleanup-runner-job.sh \
-            2>&1 | tee "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/cleanup.log"
+            2>&1 | tee "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/${{ matrix.package }}/cleanup.log"
 
       - name: Write Unity validation summary
         if: always()
+        env:
+          PACKAGE_ID: ${{ matrix.package }}
         run: |
           python3 .github/scripts/actionfit-ai-ci/write-step-summary.py \
-            --title "Isolated Unity package validation" \
-            --result "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/result/result.json"
+            --title "Isolated Unity package validation: $PACKAGE_ID" \
+            --result "$ACTIONFIT_AI_CI_ARTIFACT_ROOT/unity/$PACKAGE_ID/result/result.json"
 
       - name: Upload Unity validation artifacts
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: actionfit-ai-ci-unity-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/unity
+          name: actionfit-ai-ci-unity-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/unity/${{ matrix.package }}
           if-no-files-found: warn
           retention-days: 14
+
+  advisory-result:
+    name: Advisory package validation result
+    if: always()
+    needs: [plan-validation, static-validation, unity-validation]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve Advisory result
+        env:
+          PLAN_RESULT: ${{ needs.plan-validation.result }}
+          PACKAGE_COUNT: ${{ needs.plan-validation.outputs.package_count }}
+          STATIC_RESULT: ${{ needs.static-validation.result }}
+          UNITY_RESULT: ${{ needs.unity-validation.result }}
+          SELF_HOSTED_ALLOWED: ${{ needs.plan-validation.outputs.self_hosted_allowed }}
+        run: |
+          {
+            echo "## ActionFit package Advisory"
+            echo
+            printf '%s\n' "- Plan: \`$PLAN_RESULT\`"
+            printf '%s\n' "- Changed packages: \`${PACKAGE_COUNT:-unknown}\`"
+            printf '%s\n' "- Static matrix: \`$STATIC_RESULT\`"
+            printf '%s\n' "- Unity matrix: \`$UNITY_RESULT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$PLAN_RESULT" != "success" ]; then
+            echo "Package validation planning failed." >&2
+            exit 1
+          fi
+          if [ "$PACKAGE_COUNT" = "0" ]; then
+            echo "No ActionFit package changes; Advisory validation completed."
+            exit 0
+          fi
+          if [ "$SELF_HOSTED_ALLOWED" != "true" ]; then
+            echo "Fork pull requests cannot execute package code on the persistent self-hosted runner." >&2
+            exit 1
+          fi
+          if [ "$STATIC_RESULT" != "success" ] || [ "$UNITY_RESULT" != "success" ]; then
+            echo "One or more package validation jobs failed or did not complete." >&2
+            exit 1
+          fi
+          echo "All changed ActionFit packages passed Advisory validation."

@@ -1,13 +1,13 @@
 # AI CI (`com.actionfit.ai-ci`)
 
-AI CI runs the ActionFit package contract validator from a local Unity project, prepares disposable Unity projects for isolated package compilation and tests, and ships a manual GitHub Actions workflow that reuses those same engines. Local and CI validation therefore keep the same schemas, diagnostics, and exit codes.
+AI CI runs the ActionFit package contract validator from a local Unity project, prepares disposable Unity projects for isolated package compilation and tests, and ships manual plus pull-request Advisory GitHub Actions validation that reuses those same engines. Local and CI validation therefore keep the same schemas, diagnostics, and exit codes.
 
 ## Install
 
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.6"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.8"
   }
 }
 ```
@@ -95,19 +95,23 @@ The runner finds the exact Unity patch from `ProjectSettings/ProjectVersion.txt`
 
 The source game project and package contents are never copied or modified. The fixture uses local `file:` references, so uncommitted worktree changes are compiled and tested directly. GitHub Actions should call this runner instead of maintaining a second test implementation.
 
-## Manual GitHub Actions Validation
+## GitHub Actions Validation
 
 After explicitly applying the setup assets, open GitHub Actions, select `ActionFit Package Validation`, and choose `Run workflow` on a trusted branch. Enter the embedded `package_id`; optionally enter `base_ref` when the static package contract should enforce a version change against that Git ref.
 
-The workflow is manual-only and grants `contents: read`:
+The same workflow also runs as a non-required Advisory check for `pull_request` events. It grants only `contents: read`, does not use a workflow-level path filter, and handles pull requests as follows:
 
-- `Static package contract` runs on a GitHub-hosted Ubuntu runner and invokes `Tools~/ai_ci.py`.
-- `Isolated Unity package validation` runs only after the static job succeeds, targets `[self-hosted, macOS, unity-package-ci]`, and invokes `Tools~/run_unity_package_tests.py`.
-- Both jobs append a GitHub Step Summary and attempt to retain their JSON and logs for 14 days. The Unity artifact also includes NUnit XML and shell logs when those outputs exist. Artifact upload is best-effort: quota or storage failures are reported on the upload step but do not fail a successful validation or prevent the Unity job from starting. Validation, preflight, and cleanup failures still fail their jobs.
+- The planner compares the exact PR base SHA with the checked-out head SHA and emits a sorted matrix containing only changed `Packages/com.actionfit.*` package IDs. A package folder's sibling `.meta` maps back to the owning package instead of becoming a second matrix entry. Deleted package paths stay in scope so contract validation reports the missing package.
+- A PR with no ActionFit package changes finishes through the final Advisory job without creating an empty matrix or leaving a pending check.
+- `Static package contract (<package>)` runs once per changed package on GitHub-hosted Ubuntu and invokes `Tools~/ai_ci.py`.
+- `Isolated Unity package validation (<package>)` runs once per changed package only after the static matrix succeeds, targets `[self-hosted, macOS, unity-package-ci]`, and invokes `Tools~/run_unity_package_tests.py`.
+- Pull requests from forks are not allowed to execute package code on the persistent self-hosted runner; the final Advisory job reports that boundary as a failure. The workflow never uses `pull_request_target`.
+- New commits cancel an older in-progress run for the same pull request. Manually dispatched runs are not canceled.
+- The plan and every package job append a GitHub Step Summary and attempt to retain package-distinguishable JSON and logs for 14 days. The Unity artifact also includes NUnit XML and shell logs when those outputs exist. Artifact upload is best-effort: quota or storage failures are reported on the upload step but do not fail a successful validation or prevent the Unity job from starting. Validation, preflight, and cleanup failures still fail their jobs.
 - The Unity job runs the repository preflight before credentials or package code, prepares only job-scoped read access, and calls runner cleanup under `if: always()`.
 - The Unity wrapper creates a short marker-owned `RUNNER_TEMP/afci.*` root for its fixture so Unity Bee IPC sockets remain below the macOS domain-socket path limit.
 
-The Unity job requires the dedicated runner and local read-only package token described in `Docs/AI/tools/unity-package-ci-runner.md` in this project. It intentionally does not use the `unity-mobile` runner, mobile signing/deployment secrets, pull-request triggers, Required Checks, or package publishing. Until that external runner is provisioned and online, the static job can run but the Unity job will remain queued.
+The Unity job requires the dedicated runner and local read-only package token described in `Docs/AI/tools/unity-package-ci-runner.md` in this project. It intentionally does not use the `unity-mobile` runner, mobile signing/deployment secrets, `pull_request_target`, Required Checks, or package publishing. Until that external runner is provisioned and online, the static job can run but the Unity job will remain queued.
 
 ## Unity Editor API
 
@@ -125,7 +129,7 @@ string json = AiCiPackageValidationApi.ExecuteJson(
 
 `Execute` returns process metadata, a human-readable `Summary`, and the unchanged shared schema in `ResultJson`. `ExecuteJson` returns that shared JSON directly. The API validates the current worktree on disk; it does not create temporary projects, compile packages, run Unity tests, or modify game content.
 
-`AiCiWorkflowSetupApi.Preview()` is read-only and reports the four workflow assets as Missing, Different, or Current. `AiCiWorkflowSetupApi.Apply()` performs the same explicit synchronization as the menu without showing dialogs. Automation must call Preview first and must not infer approval to overwrite Different files.
+`AiCiWorkflowSetupApi.Preview()` is read-only and reports the five workflow assets as Missing, Different, or Current. `AiCiWorkflowSetupApi.Apply()` performs the same explicit synchronization as the menu without showing dialogs. Automation must call Preview first and must not infer approval to overwrite Different files.
 
 ## Unity Menu
 
@@ -144,7 +148,7 @@ python Packages/com.actionfit.ai-ci/Tests~/test_run_unity_package_tests.py
 python Packages/com.actionfit.ai-ci/Tests~/test_github_actions.py
 ```
 
-The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, isolated compile/test modes, actionable NUnit and Shell failure details, timeout handling, failure classification, workflow/source synchronization, manual read-only triggers, Step Summary rendering, and always-cleanup fixture handoff.
+The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, isolated compile/test modes, actionable NUnit and Shell failure details, timeout handling, failure classification, workflow/source synchronization, PR package planning and fast success, read-only runner boundaries, Step Summary rendering, and always-cleanup fixture handoff.
 
 ## AI Guide
 

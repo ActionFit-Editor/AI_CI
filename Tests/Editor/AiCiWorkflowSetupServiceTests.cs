@@ -20,6 +20,7 @@ namespace ActionFit.AiCi.Editor.Tests
             _repositoryRoot = Path.Combine(_root, "repository");
             Directory.CreateDirectory(_repositoryRoot);
             WritePackageAsset("WorkflowTemplates/actionfit-package-validation.yml", "workflow-v1");
+            WritePackageAsset(".github/scripts/actionfit-ai-ci/plan-package-validation.py", "plan-v1");
             WritePackageAsset(".github/scripts/actionfit-ai-ci/run-static-validation.sh", "static-v1");
             WritePackageAsset(".github/scripts/actionfit-ai-ci/run-unity-validation.sh", "unity-v1");
             WritePackageAsset(".github/scripts/actionfit-ai-ci/write-step-summary.py", "summary-v1");
@@ -38,7 +39,7 @@ namespace ActionFit.AiCi.Editor.Tests
 
             Assert.That(preview.Success, Is.True);
             Assert.That(preview.IsCurrent, Is.False);
-            Assert.That(preview.Assets, Has.Count.EqualTo(4));
+            Assert.That(preview.Assets, Has.Count.EqualTo(5));
             Assert.That(preview.Assets.All(asset => asset.State == AiCiWorkflowAssetState.Missing), Is.True);
             Assert.That(File.Exists(Target(".github/workflows/actionfit-package-validation.yml")), Is.False);
 

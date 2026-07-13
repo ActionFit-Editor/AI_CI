@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for the manual GitHub Actions package-validation workflow."""
+"""Regression tests for the GitHub Actions package-validation workflow."""
 
 from __future__ import annotations
 
@@ -18,27 +18,49 @@ PACKAGE_WORKFLOW = PACKAGE_ROOT / "WorkflowTemplates/actionfit-package-validatio
 PROJECT_WORKFLOW = REPO_ROOT / ".github/workflows/actionfit-package-validation.yml"
 PACKAGE_SCRIPTS = PACKAGE_ROOT / ".github/scripts/actionfit-ai-ci"
 PROJECT_SCRIPTS = REPO_ROOT / ".github/scripts/actionfit-ai-ci"
+PLAN_SCRIPT = PACKAGE_SCRIPTS / "plan-package-validation.py"
 
 
 class GitHubActionsWorkflowTests(unittest.TestCase):
     def test_project_assets_match_package_sources(self) -> None:
         self.assertEqual(PACKAGE_WORKFLOW.read_bytes(), PROJECT_WORKFLOW.read_bytes())
-        for name in ("run-static-validation.sh", "run-unity-validation.sh", "write-step-summary.py"):
+        for name in (
+            "plan-package-validation.py",
+            "run-static-validation.sh",
+            "run-unity-validation.sh",
+            "write-step-summary.py",
+        ):
             self.assertEqual((PACKAGE_SCRIPTS / name).read_bytes(), (PROJECT_SCRIPTS / name).read_bytes())
 
-    def test_workflow_is_manual_read_only_and_uses_separate_runners(self) -> None:
+    def test_workflow_is_read_only_advisory_and_uses_separate_runners(self) -> None:
         workflow = PACKAGE_WORKFLOW.read_text(encoding="utf-8")
 
         self.assertIn("workflow_dispatch:", workflow)
-        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("pull_request:", workflow)
+        self.assertNotIn("pull_request_target:", workflow)
+        self.assertNotIn("paths:", workflow)
         self.assertIn("contents: read", workflow)
         self.assertIn("runs-on: ubuntu-latest", workflow)
         self.assertIn("runs-on: [self-hosted, macOS, unity-package-ci]", workflow)
         self.assertNotIn("unity-mobile", workflow)
         self.assertIn("persist-credentials: false", workflow)
+        self.assertIn("github.event.pull_request.base.sha", workflow)
+        self.assertIn("github.event.pull_request.head.sha", workflow)
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", workflow)
+        self.assertEqual(2, workflow.count("fromJSON(needs.plan-validation.outputs.packages)"))
+        self.assertEqual(2, workflow.count("fail-fast: false"))
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+        self.assertIn("Advisory package validation result", workflow)
         self.assertIn("if: always()", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
-        self.assertEqual(2, workflow.count("continue-on-error: true"))
+        self.assertEqual(3, workflow.count("continue-on-error: true"))
+        self.assertIn(
+            "- name: Upload package plan artifact\n"
+            "        if: always()\n"
+            "        continue-on-error: true\n"
+            "        uses: actions/upload-artifact@v4",
+            workflow,
+        )
         self.assertIn(
             "- name: Upload static validation artifacts\n"
             "        if: always()\n"
@@ -53,6 +75,88 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
             "        uses: actions/upload-artifact@v4",
             workflow,
         )
+
+    def test_pull_request_plan_detects_only_changed_actionfit_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            base = self.create_planner_repository(repo)
+            (repo / "Packages/com.actionfit.alpha/README.md").write_text("alpha changed\n", encoding="utf-8")
+            (repo / "Packages/com.actionfit.beta/README.md").write_text("beta changed\n", encoding="utf-8")
+            (repo / "Docs/notes.md").write_text("not a package\n", encoding="utf-8")
+            self.git(repo, "add", ".")
+            self.git(repo, "commit", "-m", "change two packages")
+
+            completed, result, github_outputs = self.run_planner(repo, "pull_request", base_ref=base)
+
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertEqual(["com.actionfit.alpha", "com.actionfit.beta"], result["packages"])
+            self.assertIn('packages=["com.actionfit.alpha","com.actionfit.beta"]', github_outputs)
+            self.assertIn("package_count=2", github_outputs)
+            self.assertIn(f"base_ref={base}", github_outputs)
+
+    def test_pull_request_plan_fast_succeeds_without_package_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            base = self.create_planner_repository(repo)
+            (repo / "Docs/notes.md").write_text("docs only\n", encoding="utf-8")
+            self.git(repo, "add", ".")
+            self.git(repo, "commit", "-m", "docs only")
+
+            completed, result, github_outputs = self.run_planner(repo, "pull_request", base_ref=base)
+
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertEqual([], result["packages"])
+            self.assertEqual("NO_ACTIONFIT_PACKAGE_CHANGES", result["code"])
+            self.assertIn("packages=[]", github_outputs)
+            self.assertIn("package_count=0", github_outputs)
+
+    def test_pull_request_plan_keeps_deleted_package_in_validation_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            base = self.create_planner_repository(repo)
+            for path in (repo / "Packages/com.actionfit.alpha").iterdir():
+                path.unlink()
+            (repo / "Packages/com.actionfit.alpha").rmdir()
+            self.git(repo, "add", "-A")
+            self.git(repo, "commit", "-m", "delete package")
+
+            completed, result, _ = self.run_planner(repo, "pull_request", base_ref=base)
+
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertEqual(["com.actionfit.alpha"], result["packages"])
+
+    def test_pull_request_plan_maps_package_folder_meta_to_package(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            base = self.create_planner_repository(repo)
+            (repo / "Packages/com.actionfit.alpha.meta").write_text(
+                "fileFormatVersion: 2\nguid: 1234567890abcdef1234567890abcdef\n",
+                encoding="utf-8",
+            )
+            self.git(repo, "add", ".")
+            self.git(repo, "commit", "-m", "add package folder meta")
+
+            completed, result, _ = self.run_planner(repo, "pull_request", base_ref=base)
+
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertEqual(["com.actionfit.alpha"], result["packages"])
+
+    def test_manual_plan_keeps_selected_package_and_optional_base_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            base = self.create_planner_repository(repo)
+
+            completed, result, github_outputs = self.run_planner(
+                repo,
+                "workflow_dispatch",
+                package_id="com.actionfit.beta",
+                base_ref=base,
+            )
+
+            self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+            self.assertEqual("manual", result["mode"])
+            self.assertEqual(["com.actionfit.beta"], result["packages"])
+            self.assertIn("package_count=1", github_outputs)
 
     def test_step_summary_renders_unity_counts_and_diagnostics(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -275,6 +379,74 @@ print(json.dumps(result))
 """.lstrip(),
             encoding="utf-8",
         )
+
+    @staticmethod
+    def git(repo: Path, *arguments: str) -> str:
+        completed = subprocess.run(
+            ["git", *arguments],
+            cwd=repo,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            raise AssertionError(completed.stdout + completed.stderr)
+        return completed.stdout.strip()
+
+    @classmethod
+    def create_planner_repository(cls, repo: Path) -> str:
+        repo.mkdir(parents=True)
+        cls.git(repo, "init")
+        cls.git(repo, "config", "user.email", "ai-ci@example.invalid")
+        cls.git(repo, "config", "user.name", "AI CI Tests")
+        for package_id in ("com.actionfit.alpha", "com.actionfit.beta"):
+            package_root = repo / "Packages" / package_id
+            package_root.mkdir(parents=True)
+            (package_root / "package.json").write_text(
+                json.dumps({"name": package_id, "version": "1.0.0"}) + "\n",
+                encoding="utf-8",
+            )
+            (package_root / "README.md").write_text(f"{package_id}\n", encoding="utf-8")
+        (repo / "Docs").mkdir()
+        (repo / "Docs/notes.md").write_text("base\n", encoding="utf-8")
+        cls.git(repo, "add", ".")
+        cls.git(repo, "commit", "-m", "base")
+        return cls.git(repo, "rev-parse", "HEAD")
+
+    @staticmethod
+    def run_planner(
+        repo: Path,
+        event: str,
+        *,
+        package_id: str = "",
+        base_ref: str = "",
+    ) -> tuple[subprocess.CompletedProcess[str], dict[str, object], str]:
+        result_path = repo.parent / "plan-result.json"
+        github_output = repo.parent / "github-output"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(PLAN_SCRIPT),
+                "--event",
+                event,
+                "--repo-root",
+                str(repo),
+                "--package",
+                package_id,
+                "--base-ref",
+                base_ref,
+                "--output",
+                str(result_path),
+                "--github-output",
+                str(github_output),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        outputs = github_output.read_text(encoding="utf-8") if github_output.exists() else ""
+        return completed, result, outputs
 
 
 if __name__ == "__main__":

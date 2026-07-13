@@ -7,12 +7,12 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.6`
+- Current package version at generation time: `1.0.8`
 - Unity version: `6000.2`
 
 ## Purpose
 
-AI CI exposes local package contract validation, isolated Unity package testing, and an explicitly installed manual GitHub Actions workflow. Contract checks delegate to `com.actionfit.custompackagemanager/Tools~/package_contract_validator.py`; the project generator resolves the current worktree dependency closure; and both local and workflow entry points reuse the same engines, result schemas, and exit codes without modifying the game project.
+AI CI exposes local package contract validation, isolated Unity package testing, and an explicitly installed manual plus pull-request Advisory GitHub Actions workflow. Contract checks delegate to `com.actionfit.custompackagemanager/Tools~/package_contract_validator.py`; the project generator resolves the current worktree dependency closure; and both local and workflow entry points reuse the same engines, result schemas, and exit codes without modifying the game project.
 
 ## Project Router Registration
 
@@ -36,10 +36,11 @@ Read this file when:
 - `Tools~/ai_ci.py`: Unity-independent CLI wrapper that locates and invokes the shared validator.
 - `Tools~/prepare_unity_project.py`: cross-platform dependency closure, minimal Unity project preparation, structured results, and marker-guarded cleanup.
 - `Tools~/run_unity_package_tests.py`: cross-platform exact-patch Unity discovery, isolated compilation/EditMode execution, optional shell tests, artifacts, timeout handling, and result classification.
-- `WorkflowTemplates/actionfit-package-validation.yml`: package-owned manual workflow source with separate static and dedicated Unity jobs.
-- `.github/scripts/actionfit-ai-ci/`: package-owned workflow wrappers and GitHub Step Summary renderer; the setup API copies these into the consuming repository only on explicit Apply.
+- `WorkflowTemplates/actionfit-package-validation.yml`: package-owned manual and PR Advisory workflow source with planning, static matrix, dedicated Unity matrix, and final result jobs.
+- `.github/scripts/actionfit-ai-ci/plan-package-validation.py`: exact-base-SHA PR change planner that emits sorted ActionFit package matrices and a structured result.
+- `.github/scripts/actionfit-ai-ci/`: package-owned planner, workflow wrappers, and GitHub Step Summary renderer; the setup API copies these into the consuming repository only on explicit Apply.
 - `Editor/Scripts/AiCiPackageValidationApi.cs`: dialog-free Unity Editor API and JSON entry point.
-- `Editor/Scripts/AiCiWorkflowSetupApi.cs`: read-only workflow preview plus explicit synchronization API for the four owned repository assets.
+- `Editor/Scripts/AiCiWorkflowSetupApi.cs`: read-only workflow preview plus explicit synchronization API for the five owned repository assets.
 - `Editor/Scripts/AiCiPackageMenu.cs`: selected-package validation, workflow setup, and README menu commands.
 - `Tests/Editor/AiCiWorkflowSetupServiceTests.cs`: preview, explicit apply, overwrite boundary, and no-partial-write regression tests.
 - `Tests~/test_ai_ci.py`: local CLI and result-contract regression tests.
@@ -91,20 +92,22 @@ Read this file when:
 
 ## GitHub Actions Workflow Contract
 
-- Package installation or update must never write `.github` automatically. `AiCiWorkflowSetupApi.Preview` and `Tools/Package/AI CI/Setup Package CI` show Missing/Different/Current first; only explicit `Apply` may synchronize the fixed workflow and three fixed scripts.
+- Package installation or update must never write `.github` automatically. `AiCiWorkflowSetupApi.Preview` and `Tools/Package/AI CI/Setup Package CI` show Missing/Different/Current first; only explicit `Apply` may synchronize the fixed workflow and four fixed scripts.
 - Treat `WorkflowTemplates/actionfit-package-validation.yml` and package `.github/scripts/actionfit-ai-ci/*` as the sources of truth. The repository-root copies must remain byte-identical after synchronization.
-- Keep the trigger `workflow_dispatch` only, with required `package_id` and optional `base_ref`. Do not add `pull_request`, Required Check, schedule, package publishing, deployment, or automatic package-install triggers without separate approval.
-- Keep top-level permissions at `contents: read`, checkout credentials non-persistent, and run only trusted selected refs.
-- Static validation runs on `ubuntu-latest` through `Tools~/ai_ci.py`. Unity validation runs only after static success on `[self-hosted, macOS, unity-package-ci]` through `Tools~/run_unity_package_tests.py`; never route it to `unity-mobile`.
+- Keep both `workflow_dispatch` and `pull_request`. Manual runs require `package_id` and accept optional `base_ref`; PR runs use the exact event base SHA and explicitly check out the head SHA. Do not add `pull_request_target`, Required Check, schedule, package publishing, deployment, or automatic package-install triggers without separate approval.
+- Do not add a workflow-level `paths` filter. The planner must inspect the PR diff inside the job, emit a sorted matrix containing only `Packages/com.actionfit.*` IDs, retain deleted package paths, and emit an empty list for the no-package fast-success path.
+- Keep top-level permissions at `contents: read` and checkout credentials non-persistent. A fork PR must never reach the persistent self-hosted runner; the final Advisory job must report the boundary instead of silently claiming full validation.
+- Static validation runs per matrix package on `ubuntu-latest` through `Tools~/ai_ci.py`. Unity validation runs per matrix package only after static matrix success on `[self-hosted, macOS, unity-package-ci]` through `Tools~/run_unity_package_tests.py`; never route it to `unity-mobile`.
+- Keep PR concurrency scoped to the PR number and cancel older in-progress PR runs. Preserve non-canceling manual dispatch behavior. Use `fail-fast: false` so every package result is distinguishable.
 - The Unity wrapper must run repository preflight first, prepare read-only package access in job scope, create a short marker-owned `RUNNER_TEMP/afci.*` root so macOS Bee IPC sockets remain below the platform path limit, export `PACKAGE_CI_FIXTURE_ROOT`, and leave final cleanup to an `if: always()` step. Cleanup must continue accepting the legacy `RUNNER_TEMP/actionfit-unity-package-ci-*` prefix for in-flight compatibility.
-- Both jobs write GitHub Step Summary output and attempt to keep JSON/log artifacts. Unity additionally attempts to preserve NUnit XML and shell output when produced. Artifact upload steps must use `continue-on-error: true` so storage quota or service failures do not override a successful validation or block the dependent Unity job. Validation, preflight, and cleanup failures remain blocking. Infrastructure fallback JSON must keep the Unity runner schema.
+- The plan and both validation matrices write GitHub Step Summary output and attempt to keep package-distinguishable JSON/log artifacts. Unity additionally attempts to preserve NUnit XML and shell output when produced. Artifact upload steps must use `continue-on-error: true` so storage quota or service failures do not override a successful validation or block the dependent Unity job. Validation, preflight, and cleanup failures remain blocking. Infrastructure fallback JSON must keep the Unity runner schema.
 - A real Unity workflow run depends on the externally provisioned dedicated runner described by `Docs/AI/tools/unity-package-ci-runner.md`; repository code does not create the OS user, runner registration, Unity license, or token.
 
 ## API And Menu Rules
 
 - `AiCiPackageValidationApi` is the public dialog-free API for Unity connectors and editor automation.
 - `AiCiPackageValidationApi.ExecuteJson` returns the shared engine JSON directly, including infrastructure failures.
-- `AiCiWorkflowSetupApi.Preview` is read-only. `Apply` writes only the four fixed package-owned targets and must be called only after explicit overwrite approval for Different files.
+- `AiCiWorkflowSetupApi.Preview` is read-only. `Apply` writes only the five fixed package-owned targets and must be called only after explicit overwrite approval for Different files.
 - The Editor API may start Python but must not start Unity, create a temporary project, compile packages, run Unity tests, or modify project content.
 - `Tools/Package/AI CI/Validate Package` is a human-facing selected-package command. Keep UI dialogs in the menu layer, never in the API.
 - `Tools/Package/AI CI/Setup Package CI` must show a preview and separate Apply confirmation; installing the package is not setup approval.
@@ -126,7 +129,7 @@ Read this file when:
 
 - Unity menu root: `Tools/Package/AI CI/`.
 - `Validate Package`: validates the selected embedded `com.actionfit.*` package.
-- `Setup Package CI`: previews and explicitly synchronizes the package-owned manual workflow and helper scripts into the consuming repository.
+- `Setup Package CI`: previews and explicitly synchronizes the package-owned manual/PR Advisory workflow and helper scripts into the consuming repository.
 - `README`: opens this package README.
 - Keep this package in the executable-tools priority band.
 
