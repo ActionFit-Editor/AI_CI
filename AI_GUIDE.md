@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.3`
+- Current package version at generation time: `1.0.5`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -96,8 +96,8 @@ Read this file when:
 - Keep the trigger `workflow_dispatch` only, with required `package_id` and optional `base_ref`. Do not add `pull_request`, Required Check, schedule, package publishing, deployment, or automatic package-install triggers without separate approval.
 - Keep top-level permissions at `contents: read`, checkout credentials non-persistent, and run only trusted selected refs.
 - Static validation runs on `ubuntu-latest` through `Tools~/ai_ci.py`. Unity validation runs only after static success on `[self-hosted, macOS, unity-package-ci]` through `Tools~/run_unity_package_tests.py`; never route it to `unity-mobile`.
-- The Unity wrapper must run repository preflight first, prepare read-only package access in job scope, place its fixture root under the controlled `RUNNER_TEMP/actionfit-unity-package-ci-*` prefix, export `PACKAGE_CI_FIXTURE_ROOT`, and leave final cleanup to an `if: always()` step.
-- Both jobs keep JSON/log artifacts and write GitHub Step Summary output. Unity additionally preserves NUnit XML and shell output when produced. Infrastructure fallback JSON must keep the Unity runner schema.
+- The Unity wrapper must run repository preflight first, prepare read-only package access in job scope, create a short marker-owned `RUNNER_TEMP/afci.*` root so macOS Bee IPC sockets remain below the platform path limit, export `PACKAGE_CI_FIXTURE_ROOT`, and leave final cleanup to an `if: always()` step. Cleanup must continue accepting the legacy `RUNNER_TEMP/actionfit-unity-package-ci-*` prefix for in-flight compatibility.
+- Both jobs write GitHub Step Summary output and attempt to keep JSON/log artifacts. Unity additionally attempts to preserve NUnit XML and shell output when produced. Artifact upload steps must use `continue-on-error: true` so storage quota or service failures do not override a successful validation or block the dependent Unity job. Validation, preflight, and cleanup failures remain blocking. Infrastructure fallback JSON must keep the Unity runner schema.
 - A real Unity workflow run depends on the externally provisioned dedicated runner described by `Docs/AI/tools/unity-package-ci-runner.md`; repository code does not create the OS user, runner registration, Unity license, or token.
 
 ## API And Menu Rules

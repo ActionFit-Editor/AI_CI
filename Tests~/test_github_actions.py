@@ -38,6 +38,21 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
         self.assertIn("persist-credentials: false", workflow)
         self.assertIn("if: always()", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
+        self.assertEqual(2, workflow.count("continue-on-error: true"))
+        self.assertIn(
+            "- name: Upload static validation artifacts\n"
+            "        if: always()\n"
+            "        continue-on-error: true\n"
+            "        uses: actions/upload-artifact@v4",
+            workflow,
+        )
+        self.assertIn(
+            "- name: Upload Unity validation artifacts\n"
+            "        if: always()\n"
+            "        continue-on-error: true\n"
+            "        uses: actions/upload-artifact@v4",
+            workflow,
+        )
 
     def test_step_summary_renders_unity_counts_and_diagnostics(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -152,7 +167,17 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
             )
 
             self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
-            fixture_root = runner_temp / "actionfit-unity-package-ci-123-2-com.actionfit.target"
+            fixture_lines = [
+                line.split("=", 1)[1]
+                for line in github_env.read_text(encoding="utf-8").splitlines()
+                if line.startswith("PACKAGE_CI_FIXTURE_ROOT=")
+            ]
+            self.assertEqual(1, len(fixture_lines))
+            fixture_root = Path(fixture_lines[0])
+            self.assertEqual(runner_temp, fixture_root.parent)
+            self.assertTrue(fixture_root.name.startswith("afci."), fixture_root)
+            legacy_fixture_root = runner_temp / "actionfit-unity-package-ci-123-2-com.actionfit.target"
+            self.assertLess(len(str(fixture_root)), len(str(legacy_fixture_root)))
             self.assertIn(f"PACKAGE_CI_FIXTURE_ROOT={fixture_root}", github_env.read_text(encoding="utf-8"))
             captured = json.loads((artifacts / "captured-environment.json").read_text(encoding="utf-8"))
             self.assertEqual(str(fixture_root), captured["TMPDIR"])

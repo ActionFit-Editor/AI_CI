@@ -7,7 +7,7 @@ AI CI runs the ActionFit package contract validator from a local Unity project, 
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.3"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.5"
   }
 }
 ```
@@ -103,8 +103,9 @@ The workflow is manual-only and grants `contents: read`:
 
 - `Static package contract` runs on a GitHub-hosted Ubuntu runner and invokes `Tools~/ai_ci.py`.
 - `Isolated Unity package validation` runs only after the static job succeeds, targets `[self-hosted, macOS, unity-package-ci]`, and invokes `Tools~/run_unity_package_tests.py`.
-- Both jobs append a GitHub Step Summary and retain their JSON and logs for 14 days. The Unity artifact also includes NUnit XML and shell logs when those outputs exist.
+- Both jobs append a GitHub Step Summary and attempt to retain their JSON and logs for 14 days. The Unity artifact also includes NUnit XML and shell logs when those outputs exist. Artifact upload is best-effort: quota or storage failures are reported on the upload step but do not fail a successful validation or prevent the Unity job from starting. Validation, preflight, and cleanup failures still fail their jobs.
 - The Unity job runs the repository preflight before credentials or package code, prepares only job-scoped read access, and calls runner cleanup under `if: always()`.
+- The Unity wrapper creates a short marker-owned `RUNNER_TEMP/afci.*` root for its fixture so Unity Bee IPC sockets remain below the macOS domain-socket path limit.
 
 The Unity job requires the dedicated runner and local read-only package token described in `Docs/AI/tools/unity-package-ci-runner.md` in this project. It intentionally does not use the `unity-mobile` runner, mobile signing/deployment secrets, pull-request triggers, Required Checks, or package publishing. Until that external runner is provisioned and online, the static job can run but the Unity job will remain queued.
 

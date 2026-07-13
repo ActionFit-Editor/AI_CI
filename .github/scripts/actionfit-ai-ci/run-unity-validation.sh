@@ -110,8 +110,14 @@ fi
 safe_package="$(printf '%s' "$package_id" | tr -c 'A-Za-z0-9._-' '_')"
 run_id="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-${safe_package}"
 runner_temp="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
-fixture_root="$runner_temp/actionfit-unity-package-ci-$run_id"
-mkdir -p "$fixture_root"
+fixture_root_log="$artifact_root/fixture-root.log"
+if ! fixture_root="$(mktemp -d "$runner_temp/afci.XXXXXX" 2> "$fixture_root_log")"; then
+  write_infrastructure_result \
+    "PACKAGE_CI_TEMP_ROOT_FAILED" \
+    "Could not create the short Unity package CI temporary root." \
+    "$fixture_root_log"
+  exit 2
+fi
 export TMPDIR="$fixture_root"
 export PACKAGE_CI_FIXTURE_ROOT="$fixture_root"
 if [ -n "$original_github_env" ]; then

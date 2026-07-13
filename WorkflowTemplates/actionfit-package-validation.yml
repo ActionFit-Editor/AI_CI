@@ -59,6 +59,7 @@ jobs:
 
       - name: Upload static validation artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: actionfit-ai-ci-static-${{ github.run_id }}-${{ github.run_attempt }}
@@ -104,6 +105,7 @@ jobs:
 
       - name: Upload Unity validation artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: actionfit-ai-ci-unity-${{ github.run_id }}-${{ github.run_attempt }}
