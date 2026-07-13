@@ -7,7 +7,7 @@ AI CI runs the ActionFit package contract validator from a local Unity project, 
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.9"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.10"
   }
 }
 ```
@@ -22,6 +22,16 @@ Installing or updating the package does not modify the consuming repository's `.
 - `.github/scripts/actionfit-ai-ci/write-step-summary.py`
 
 Run the menu again after an AI CI package update to preview and explicitly synchronize a newer template. A Different target may contain repository-specific edits, so review it before allowing Apply to overwrite it.
+
+## Agent Skills
+
+Custom Package Manager의 `Install or Refresh Agent Skills`는 Codex와 Claude에 다음 project-local skill을 설치합니다.
+
+- `package-ci-help`: validator, isolated Unity runner, workflow setup과 결과 코드를 설명합니다.
+- `package-ci-validate`: package contract validator를 read-only로 실행합니다.
+- `package-ci-setup`: 명시 호출 시 먼저 Missing/Different/Current preview를 보여 주고, `Different` 대상은 별도 덮어쓰기 승인을 받은 뒤에만 다섯 파일을 동기화합니다.
+
+write-capable setup skill은 암시 호출되지 않습니다. 설치와 refresh 자체는 `.github`를 수정하지 않으며, 사용자가 수정했거나 관리되지 않는 installed skill도 보존합니다.
 
 ## Local CLI
 

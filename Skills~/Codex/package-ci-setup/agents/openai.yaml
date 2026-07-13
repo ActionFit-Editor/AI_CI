@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set Up Package CI"
+  short_description: "Preview and explicitly sync package CI workflow assets"
+  default_prompt: "Use $package-ci-setup to preview and explicitly synchronize AI CI workflow assets."
+policy:
+  allow_implicit_invocation: false

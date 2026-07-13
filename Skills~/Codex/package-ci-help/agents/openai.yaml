@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI CI Help"
+  short_description: "Explain package validation, workflow setup, and safety"
+  default_prompt: "Use $package-ci-help to explain AI CI skills, commands, setup, and result boundaries."

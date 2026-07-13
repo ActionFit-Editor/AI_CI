@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "skillPrefix": "package-ci",
+  "helpSkill": "package-ci-help",
+  "skills": [
+    {
+      "name": "package-ci-help",
+      "agents": ["codex", "claude"],
+      "includeShared": false,
+      "access": "read-only"
+    },
+    {
+      "name": "package-ci-validate",
+      "agents": ["codex", "claude"],
+      "includeShared": false,
+      "access": "read-only"
+    },
+    {
+      "name": "package-ci-setup",
+      "agents": ["codex", "claude"],
+      "includeShared": false,
+      "access": "write-capable"
+    }
+  ]
+}

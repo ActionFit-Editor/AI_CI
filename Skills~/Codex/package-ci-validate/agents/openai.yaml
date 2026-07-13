@@ -1,0 +1,4 @@
+interface:
+  display_name: "Validate ActionFit Package"
+  short_description: "Run read-only ActionFit package contract validation"
+  default_prompt: "Use $package-ci-validate to run and interpret ActionFit package contract validation."
