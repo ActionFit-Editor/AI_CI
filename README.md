@@ -7,7 +7,7 @@ AI CI runs the ActionFit package contract validator from a local Unity project a
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.1"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.2"
   }
 }
 ```
@@ -67,6 +67,25 @@ python Packages/com.actionfit.ai-ci/Tools~/prepare_unity_project.py \
 
 Cleanup rejects folders without a matching `.actionfit-ai-ci-fixture.json` marker and matching `projectPath`. The source project's `Packages/manifest.json`, `Library`, Assets, and scenes are not modified.
 
+## Isolated Unity Tests
+
+Run the same top-level command on Windows and macOS from the Unity project root:
+
+```bash
+python Packages/com.actionfit.ai-ci/Tools~/run_unity_package_tests.py \
+  --package com.actionfit.custompackagemanager
+```
+
+The runner finds the exact Unity patch from `ProjectSettings/ProjectVersion.txt`, prepares a short-path disposable project under the operating system temporary directory, and writes durable artifacts under the worktree's `Temp/ActionFitAiCi/Results/<run-id>`. Pass `--unity-executable` or set `UNITY_EDITOR_PATH` when Unity Hub is not installed in its default location. Useful overrides include `--run-id`, `--result-dir`, `--timeout-seconds`, and `--keep-project`.
+
+- If the package contains `Tests/Editor/*.asmdef`, the package is marked `testables`, only those assemblies run as EditMode tests with the source project's exact `com.unity.test-framework` version, and Unity produces `nunit-results.xml`.
+- If no Editor test assembly exists, the same isolated project performs compile-only validation and succeeds when compilation succeeds.
+- If `Tests/Shell/run-tests.sh` exists, it runs after Unity validation. Windows uses `BASH_EXE` or Git Bash; macOS uses Bash.
+- `result.json`, `unity.log`, optional NUnit XML, and optional `shell.log` share one `runId`. Failed results include a Unity log tail.
+- Exit code `0` means success, `1` means package compilation/test validation failed, and `2` means Unity, licensing, dependency resolution, timeout, or runner infrastructure failed.
+
+The source game project and package contents are never copied or modified. The fixture uses local `file:` references, so uncommitted worktree changes are compiled and tested directly. GitHub Actions should call this runner instead of maintaining a second test implementation.
+
 ## Unity Editor API
 
 `AiCiPackageValidationApi` is dialog-free and safe for AI connectors or editor automation:
@@ -95,9 +114,10 @@ The menu is a human-facing convenience layer. Automation should call the CLI or 
 ```bash
 python Packages/com.actionfit.ai-ci/Tests~/test_ai_ci.py
 python Packages/com.actionfit.ai-ci/Tests~/test_prepare_unity_project.py
+python Packages/com.actionfit.ai-ci/Tests~/test_run_unity_package_tests.py
 ```
 
-The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, and validation of this package through the shared engine.
+The tests verify JSON passthrough, readable summaries, infrastructure result shape, local/catalog/Registry dependency closure, path guards, marker-owned cleanup, isolated compile/test modes, NUnit interpretation, shell execution, timeout handling, and failure classification.
 
 ## AI Guide
 
