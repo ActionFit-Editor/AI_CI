@@ -73,8 +73,13 @@ def changed_package_ids(repo_root: Path, base_ref: str) -> list[str]:
         candidate = parts[1]
         if len(parts) == 2 and candidate.endswith(".meta"):
             candidate = candidate[:-5]
-        if PACKAGE_ID_PATTERN.fullmatch(candidate):
-            package_ids.add(candidate)
+        if not PACKAGE_ID_PATTERN.fullmatch(candidate):
+            continue
+        if not (repo_root / "Packages" / candidate / "package.json").is_file():
+            # Deleted or renamed-away packages leave only removal diff entries and
+            # have no directory at HEAD, so they cannot be validated.
+            continue
+        package_ids.add(candidate)
     return sorted(package_ids)
 
 
