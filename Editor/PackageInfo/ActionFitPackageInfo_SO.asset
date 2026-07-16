@@ -21,11 +21,5 @@ MonoBehaviour:
   _description: "ActionFit \uD328\uD0A4\uC9C0 \uACC4\uC57D \uAC80\uC99D\uACFC \uACA9\uB9AC
     Unity \uD14C\uC2A4\uD2B8\uC6A9 disposable \uD504\uB85C\uC81D\uD2B8 \uC0DD\uC131\uC744
     \uB85C\uCEEC\xB7CI \uACF5\uD1B5 \uACBD\uB85C\uB85C \uC81C\uACF5\uD569\uB2C8\uB2E4."
-  _releaseNote: "- `com.actionfit.custompackagemanager` \uC758\uC874\uC131\uC744
-    `1.1.91`\uB85C \uAC31\uC2E0\uD574 \uCD5C\uC2E0 package contract validator\uC640
-    \uD568\uAED8 \uC124\uCE58\uB418\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n- README
-    \uC124\uCE58 \uD0DC\uADF8\uC640 `AI_GUIDE.md`\uC758 \uB9B4\uB9AC\uC2A4 \uD6C4\uBCF4
-    \uBC84\uC804\uC744 `1.0.12`\uB85C \uB9DE\uCDC4\uC2B5\uB2C8\uB2E4.\n- local/CI
-    validator \uC2E4\uD589, disposable Unity project, workflow setup \uB3D9\uC791\uC740
-    \uBCC0\uACBD\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4."
+  _releaseNote: "- 내부 ActionFit 패키지 의존성을 검증된 최신 태그로 갱신했습니다.\n- 패키지 버전, 설치 예시, AI 가이드와 카탈로그 메타데이터를 함께 맞췄습니다.\n- 기존 런타임 API와 프로젝트 소유 설정은 변경하지 않았습니다."
   _dependenciesOverride: 

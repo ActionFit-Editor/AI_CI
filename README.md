@@ -7,7 +7,7 @@ AI CI runs the ActionFit package contract validator from a local Unity project, 
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.12"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.13"
   }
 }
 ```
