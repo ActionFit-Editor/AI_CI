@@ -1,6 +1,6 @@
 {
   "name": "com.actionfit.ai-ci",
-  "version": "1.0.14",
+  "version": "1.0.17",
   "displayName": "AI CI",
   "description": "Runs ActionFit package validation, isolated Unity compilation, EditMode tests, and optional shell tests.",
   "unity": "6000.2",
@@ -8,7 +8,7 @@
     "name": "ActionFit"
   },
   "dependencies": {
-    "com.actionfit.custompackagemanager": "1.1.103",
+    "com.actionfit.custompackagemanager": "1.1.106",
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
 }
