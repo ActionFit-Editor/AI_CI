@@ -21,5 +21,12 @@ MonoBehaviour:
   _description: "ActionFit \uD328\uD0A4\uC9C0 \uACC4\uC57D \uAC80\uC99D\uACFC \uACA9\uB9AC
     Unity \uD14C\uC2A4\uD2B8\uC6A9 disposable \uD504\uB85C\uC81D\uD2B8 \uC0DD\uC131\uC744
     \uB85C\uCEEC\xB7CI \uACF5\uD1B5 \uACBD\uB85C\uB85C \uC81C\uACF5\uD569\uB2C8\uB2E4."
-  _releaseNote: "- 내부 ActionFit 패키지 의존성을 검증된 최신 태그로 갱신했습니다.\n- 패키지 버전, 설치 예시, AI 가이드와 카탈로그 메타데이터를 함께 맞췄습니다.\n- 기존 런타임 API와 프로젝트 소유 설정은 변경하지 않았습니다."
+  _releaseNote: "- package.json\uC758 ActionFit dependency\uB97C \uCD5C\uC2E0 \uC900\uBE44
+    \uBC84\uC804\uC73C\uB85C \uAC31\uC2E0\uD588\uC2B5\uB2C8\uB2E4: com.actionfit.custompackagemanager
+    1.1.96 -> 1.1.103.\n- dependency \uBCC0\uACBD\uACFC \uD568\uAED8 package version,
+    README Git UPM tag, AI_GUIDE.md version\uC744 \uC815\uB82C\uD574 publish \uC804
+    contract \uAC80\uC99D\uC774 \uAC00\uB2A5\uD558\uB3C4\uB85D \uD588\uC2B5\uB2C8\uB2E4.\n-
+    \uAE30\uC874 runtime/editor API \uAD6C\uD604\uC740 \uBCC0\uACBD\uD558\uC9C0 \uC54A\uC558\uC73C\uBA70
+    \uC2E4\uC81C publish\uB294 \uBCC4\uB3C4 \uC2B9\uC778\uC744 \uAC70\uCCD0 Custom
+    Package Manager\uC5D0\uC11C \uC218\uD589\uD569\uB2C8\uB2E4."
   _dependenciesOverride: 
