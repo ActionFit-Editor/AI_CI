@@ -87,7 +87,7 @@ jobs:
     runs-on: [self-hosted, macOS, unity-package-ci]
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 4
       matrix:
         package: ${{ fromJSON(needs.plan-validation.outputs.packages) }}
     steps:
@@ -139,7 +139,7 @@ jobs:
     runs-on: [self-hosted, macOS, unity-package-ci]
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 4
       matrix:
         package: ${{ fromJSON(needs.plan-validation.outputs.packages) }}
     steps:

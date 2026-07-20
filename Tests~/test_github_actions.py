@@ -68,7 +68,7 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(2, workflow.count("fromJSON(needs.plan-validation.outputs.packages)"))
         self.assertEqual(2, workflow.count("fail-fast: false"))
-        self.assertEqual(2, workflow.count("max-parallel: 1"))
+        self.assertEqual(2, workflow.count("max-parallel: 4"))
         self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
         self.assertIn("advisory-result:\n    name: Advisory package validation result", workflow)
         self.assertEqual(1, workflow.count("name: Advisory package validation result"))

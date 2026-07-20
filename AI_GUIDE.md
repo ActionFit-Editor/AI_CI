@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.18`
+- Current package version at generation time: `1.0.19`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -102,7 +102,7 @@ Read this file when:
 - Keep top-level permissions at `contents: read` and checkout credentials non-persistent. Every job must use a server-evaluated condition that allows only manual dispatch or a pull request whose head repository equals `github.repository`. This prevents a fork PR from receiving any persistent self-hosted runner before candidate code is checked out and preserves the boundary if job dependencies change later.
 - A fork PR intentionally skips the complete self-hosted workflow. Without a trusted GitHub-hosted fallback it cannot produce a validated Advisory result and must never be merged as if package validation passed. Do not use `pull_request_target` to manufacture a fork result.
 - Static validation runs per matrix package through `Tools~/ai_ci.py`. Unity validation runs per matrix package only after the static matrix succeeds through `Tools~/run_unity_package_tests.py`.
-- Keep `max-parallel: 1` on both matrices so one persistent package runner processes package work serially and fixture, workspace, credential-helper, and cleanup state cannot overlap.
+- Keep `max-parallel: 4` on both matrices so changed packages can use up to four provisioned `unity-package-ci` runner services concurrently. Each service must retain an independent runner workspace and `RUNNER_TEMP`; do not raise the limit above the validated runner pool without separate capacity, Unity license, and isolation verification.
 - Keep PR concurrency scoped to the PR number and cancel older in-progress PR runs. Preserve non-canceling manual dispatch behavior. Use `fail-fast: false` so every package result is distinguishable.
 - The Unity wrapper must run repository preflight first, prepare read-only package access in job scope, create a short marker-owned `RUNNER_TEMP/afci.*` root so macOS Bee IPC sockets remain below the platform path limit, export `PACKAGE_CI_FIXTURE_ROOT`, and leave final cleanup to an `if: always()` step. Cleanup must continue accepting the legacy `RUNNER_TEMP/actionfit-unity-package-ci-*` prefix for in-flight compatibility.
 - The plan and both validation matrices write GitHub Step Summary output and attempt to keep package-distinguishable JSON/log artifacts. Unity additionally attempts to preserve NUnit XML and shell output when produced. Artifact upload steps must use `continue-on-error: true` so storage quota or service failures do not override a successful validation or block the dependent Unity job. Validation, preflight, and cleanup failures remain blocking. Infrastructure fallback JSON must keep the Unity runner schema.
