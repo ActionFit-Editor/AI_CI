@@ -28,4 +28,6 @@ unity-cli --project "<absolute-project>" exec \
    - `.github/scripts/actionfit-ai-ci/run-unity-validation.sh`
    - `.github/scripts/actionfit-ai-ci/write-step-summary.py`
 
+The synchronized workflow routes Plan, Static, Unity, and Advisory jobs only to `[self-hosted, macOS, unity-package-ci]`. Setup does not register, start, label, or provision that runner; report this prerequisite before Apply.
+
 Do not modify any other workflow or script. Do not run the workflow, register a runner, configure credentials, alter branch protection, publish a package, or overwrite `Different` files without the separate explicit approval required above.

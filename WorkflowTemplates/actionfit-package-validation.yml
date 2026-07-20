@@ -28,12 +28,14 @@ env:
 jobs:
   plan-validation:
     name: Plan package validation
-    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, unity-package-ci]
     outputs:
       packages: ${{ steps.plan.outputs.packages }}
       package_count: ${{ steps.plan.outputs.package_count }}
       base_ref: ${{ steps.plan.outputs.base_ref }}
-      self_hosted_allowed: ${{ steps.runner-boundary.outputs.self_hosted_allowed }}
     steps:
       - name: Checkout candidate head
         uses: actions/checkout@v4
@@ -41,17 +43,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Resolve self-hosted runner boundary
-        id: runner-boundary
-        env:
-          SELF_HOSTED_ALLOWED: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
-        run: echo "self_hosted_allowed=$SELF_HOSTED_ALLOWED" >> "$GITHUB_OUTPUT"
 
       - name: Detect ActionFit packages
         id: plan
@@ -83,17 +74,20 @@ jobs:
           name: actionfit-ai-ci-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/plan
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
   static-validation:
     name: Static package contract (${{ matrix.package }})
     needs: plan-validation
     if: >-
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository) &&
       needs.plan-validation.result == 'success' &&
       needs.plan-validation.outputs.package_count != '0'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, unity-package-ci]
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         package: ${{ fromJSON(needs.plan-validation.outputs.packages) }}
     steps:
@@ -103,11 +97,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
       - name: Run package contract validation
         env:
@@ -137,14 +126,15 @@ jobs:
           name: actionfit-ai-ci-static-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/static/${{ matrix.package }}
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
   unity-validation:
     name: Isolated Unity package validation (${{ matrix.package }})
     needs: [plan-validation, static-validation]
     if: >-
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository) &&
       needs.plan-validation.outputs.package_count != '0' &&
-      needs.plan-validation.outputs.self_hosted_allowed == 'true' &&
       needs.static-validation.result == 'success'
     runs-on: [self-hosted, macOS, unity-package-ci]
     strategy:
@@ -194,13 +184,16 @@ jobs:
           name: actionfit-ai-ci-unity-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.ACTIONFIT_AI_CI_ARTIFACT_ROOT }}/unity/${{ matrix.package }}
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
   advisory-result:
     name: Advisory package validation result
-    if: always()
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
     needs: [plan-validation, static-validation, unity-validation]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, unity-package-ci]
     steps:
       - name: Resolve Advisory result
         env:
@@ -208,7 +201,6 @@ jobs:
           PACKAGE_COUNT: ${{ needs.plan-validation.outputs.package_count }}
           STATIC_RESULT: ${{ needs.static-validation.result }}
           UNITY_RESULT: ${{ needs.unity-validation.result }}
-          SELF_HOSTED_ALLOWED: ${{ needs.plan-validation.outputs.self_hosted_allowed }}
         run: |
           {
             echo "## ActionFit package Advisory"
@@ -226,10 +218,6 @@ jobs:
           if [ "$PACKAGE_COUNT" = "0" ]; then
             echo "No ActionFit package changes; Advisory validation completed."
             exit 0
-          fi
-          if [ "$SELF_HOSTED_ALLOWED" != "true" ]; then
-            echo "Fork pull requests cannot execute package code on the persistent self-hosted runner." >&2
-            exit 1
           fi
           if [ "$STATIC_RESULT" != "success" ] || [ "$UNITY_RESULT" != "success" ]; then
             echo "One or more package validation jobs failed or did not complete." >&2

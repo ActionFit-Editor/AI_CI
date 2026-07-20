@@ -32,7 +32,7 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
         ):
             self.assertEqual((PACKAGE_SCRIPTS / name).read_bytes(), (PROJECT_SCRIPTS / name).read_bytes())
 
-    def test_workflow_is_read_only_advisory_and_uses_separate_runners(self) -> None:
+    def test_workflow_is_read_only_advisory_and_uses_dedicated_self_hosted_runner_only(self) -> None:
         workflow = PACKAGE_WORKFLOW.read_text(encoding="utf-8")
 
         self.assertIn("workflow_dispatch:", workflow)
@@ -40,15 +40,35 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
         self.assertNotIn("pull_request_target:", workflow)
         self.assertNotIn("paths:", workflow)
         self.assertIn("contents: read", workflow)
-        self.assertIn("runs-on: ubuntu-latest", workflow)
-        self.assertIn("runs-on: [self-hosted, macOS, unity-package-ci]", workflow)
+        self.assertNotIn("runs-on: ubuntu-latest", workflow)
+        self.assertNotIn("self_hosted_allowed", workflow)
+        self.assertNotIn("actions/setup-python", workflow)
+        self.assertEqual(4, workflow.count("runs-on: [self-hosted, macOS, unity-package-ci]"))
         self.assertNotIn("unity-mobile", workflow)
         self.assertIn("persist-credentials: false", workflow)
         self.assertIn("github.event.pull_request.base.sha", workflow)
         self.assertIn("github.event.pull_request.head.sha", workflow)
-        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", workflow)
+        self.assertEqual(4, workflow.count("github.event.pull_request.head.repo.full_name == github.repository"))
+        self.assertIn(
+            "plan-validation:\n"
+            "    name: Plan package validation\n"
+            "    if: >-\n"
+            "      github.event_name == 'workflow_dispatch' ||\n"
+            "      github.event.pull_request.head.repo.full_name == github.repository",
+            workflow,
+        )
+        self.assertIn(
+            "advisory-result:\n"
+            "    name: Advisory package validation result\n"
+            "    if: >-\n"
+            "      always() &&\n"
+            "      (github.event_name == 'workflow_dispatch' ||\n"
+            "      github.event.pull_request.head.repo.full_name == github.repository)",
+            workflow,
+        )
         self.assertEqual(2, workflow.count("fromJSON(needs.plan-validation.outputs.packages)"))
         self.assertEqual(2, workflow.count("fail-fast: false"))
+        self.assertEqual(2, workflow.count("max-parallel: 1"))
         self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
         self.assertIn("advisory-result:\n    name: Advisory package validation result", workflow)
         self.assertEqual(1, workflow.count("name: Advisory package validation result"))
@@ -111,7 +131,7 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
             self.assertIn("packages=[]", github_outputs)
             self.assertIn("package_count=0", github_outputs)
 
-    def test_pull_request_plan_keeps_deleted_package_in_validation_scope(self) -> None:
+    def test_pull_request_plan_skips_deleted_package_without_head_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory) / "repo"
             base = self.create_planner_repository(repo)
@@ -124,7 +144,8 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
             completed, result, _ = self.run_planner(repo, "pull_request", base_ref=base)
 
             self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
-            self.assertEqual(["com.actionfit.alpha"], result["packages"])
+            self.assertEqual([], result["packages"])
+            self.assertEqual("NO_ACTIONFIT_PACKAGE_CHANGES", result["code"])
 
     def test_pull_request_plan_maps_package_folder_meta_to_package(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
