@@ -1,8 +1,8 @@
 {
   "name": "com.actionfit.ai-ci",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "displayName": "AI CI",
-  "description": "Runs ActionFit package validation, isolated Unity compilation, EditMode tests, and optional shell tests.",
+  "description": "Runs AI documentation and ActionFit package validation, isolated Unity compilation, EditMode tests, and optional shell tests.",
   "unity": "6000.2",
   "author": {
     "name": "ActionFit"

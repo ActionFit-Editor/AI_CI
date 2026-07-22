@@ -7,12 +7,12 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.19`
+- Current package version at generation time: `1.0.20`
 - Unity version: `6000.2`
 
 ## Purpose
 
-AI CI exposes local package contract validation, isolated Unity package testing, and an explicitly installed manual plus pull-request Advisory GitHub Actions workflow. All workflow jobs target the same dedicated macOS self-hosted runner class so consuming repositories do not depend on GitHub-hosted compute. Contract checks delegate to `com.actionfit.custompackagemanager/Tools~/package_contract_validator.py`; the project generator resolves the current worktree dependency closure; and both local and workflow entry points reuse the same engines, result schemas, and exit codes without modifying the game project.
+AI CI exposes local package contract validation, isolated Unity package testing, and an explicitly installed manual plus pull-request Advisory GitHub Actions workflow that also gates the consuming repository's AI documentation validator. All workflow jobs target the same dedicated macOS self-hosted runner class so consuming repositories do not depend on GitHub-hosted compute. Contract checks delegate to `com.actionfit.custompackagemanager/Tools~/package_contract_validator.py`; the project generator resolves the current worktree dependency closure; and both local and workflow entry points reuse the same engines, result schemas, and exit codes without modifying the game project.
 
 ## Project Router Registration
 
@@ -20,7 +20,7 @@ This package should be listed in `Packages/com.actionfit.custompackagemanager/PA
 
 Requested router entry:
 
-- `Packages/com.actionfit.ai-ci/AI_GUIDE.md` - AI CI provides the local package contract validation CLI, dialog-free Unity Editor API, structured JSON results, and human-readable summaries. Read when running or changing ActionFit package validation entry points.
+- `Packages/com.actionfit.ai-ci/AI_GUIDE.md` - AI CI provides the local package contract validation CLI, dialog-free Unity Editor API, AI documentation workflow gate, structured JSON results, and human-readable summaries. Read when running or changing ActionFit package or AI documentation validation entry points.
 
 If the router file is not already included in the AI assistant's default reading sequence, the router file is responsible for asking the user to link it from the project's primary AI markdown entry point. Prefer an existing `PROJECT.md`, otherwise use `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, or another primary AI entry point.
 
@@ -38,7 +38,7 @@ Read this file when:
 - `Tools~/ai_ci.py`: Unity-independent CLI wrapper that locates and invokes the shared validator.
 - `Tools~/prepare_unity_project.py`: cross-platform dependency closure, minimal Unity project preparation, structured results, and marker-guarded cleanup.
 - `Tools~/run_unity_package_tests.py`: cross-platform exact-patch Unity discovery, isolated compilation/EditMode execution, optional shell tests, artifacts, timeout handling, and result classification.
-- `WorkflowTemplates/actionfit-package-validation.yml`: package-owned self-hosted-only manual and trusted same-repository PR Advisory workflow source with planning, serialized static and Unity matrices, and a final result job.
+- `WorkflowTemplates/actionfit-package-validation.yml`: package-owned self-hosted-only manual and trusted same-repository PR Advisory workflow source with planning, AI documentation validation, serialized static and Unity matrices, and a final result job.
 - `.github/scripts/actionfit-ai-ci/plan-package-validation.py`: exact-base-SHA PR change planner that emits sorted ActionFit package matrices and a structured result.
 - `.github/scripts/actionfit-ai-ci/`: package-owned planner, workflow wrappers, and GitHub Step Summary renderer; the setup API copies these into the consuming repository only on explicit Apply.
 - `Editor/Scripts/AiCiPackageValidationApi.cs`: dialog-free Unity Editor API and JSON entry point.
@@ -98,20 +98,21 @@ Read this file when:
 - Treat `WorkflowTemplates/actionfit-package-validation.yml` and package `.github/scripts/actionfit-ai-ci/*` as the sources of truth. The repository-root copies must remain byte-identical after synchronization.
 - Keep both `workflow_dispatch` and `pull_request`. Manual runs require `package_id` and accept optional `base_ref`; PR runs use the exact event base SHA and explicitly check out the head SHA. Do not add `pull_request_target`, Required Check, schedule, package publishing, deployment, or automatic package-install triggers without separate approval.
 - Do not add a workflow-level `paths` filter. The planner must inspect the PR diff inside the job, emit a sorted matrix containing only `Packages/com.actionfit.*` IDs that still have a HEAD `package.json`, skip deleted or renamed-away package paths that cannot be validated, and emit an empty list for the no-package fast-success path.
-- Run planning, static validation, isolated Unity validation, and the final Advisory job only on `[self-hosted, macOS, unity-package-ci]`. Do not route any package-validation job to GitHub-hosted labels or `unity-mobile`.
+- Run planning, AI documentation validation, static validation, isolated Unity validation, and the final Advisory job only on `[self-hosted, macOS, unity-package-ci]`. Do not route any package-validation job to GitHub-hosted labels or `unity-mobile`.
 - Keep top-level permissions at `contents: read` and checkout credentials non-persistent. Every job must use a server-evaluated condition that allows only manual dispatch or a pull request whose head repository equals `github.repository`. This prevents a fork PR from receiving any persistent self-hosted runner before candidate code is checked out and preserves the boundary if job dependencies change later.
 - A fork PR intentionally skips the complete self-hosted workflow. Without a trusted GitHub-hosted fallback it cannot produce a validated Advisory result and must never be merged as if package validation passed. Do not use `pull_request_target` to manufacture a fork result.
+- AI documentation validation runs once for every trusted pull request or manual execution through the consuming repository's `Tools/AI/validate_ai_docs.py`, with the planner's exact base ref exposed as `AI_PACKAGE_VERSION_BASE_REF`. Its result is required even when the changed-package matrix is empty.
 - Static validation runs per matrix package through `Tools~/ai_ci.py`. Unity validation runs per matrix package only after the static matrix succeeds through `Tools~/run_unity_package_tests.py`.
 - Keep `max-parallel: 4` on both matrices so changed packages can use up to four provisioned `unity-package-ci` runner services concurrently. Each service must retain an independent runner workspace and `RUNNER_TEMP`; do not raise the limit above the validated runner pool without separate capacity, Unity license, and isolation verification.
 - Keep PR concurrency scoped to the PR number and cancel older in-progress PR runs. Preserve non-canceling manual dispatch behavior. Use `fail-fast: false` so every package result is distinguishable.
 - The Unity wrapper must run repository preflight first, prepare read-only package access in job scope, create a short marker-owned `RUNNER_TEMP/afci.*` root so macOS Bee IPC sockets remain below the platform path limit, export `PACKAGE_CI_FIXTURE_ROOT`, and leave final cleanup to an `if: always()` step. Cleanup must continue accepting the legacy `RUNNER_TEMP/actionfit-unity-package-ci-*` prefix for in-flight compatibility.
 - The plan and both validation matrices write GitHub Step Summary output and attempt to keep package-distinguishable JSON/log artifacts. Unity additionally attempts to preserve NUnit XML and shell output when produced. Artifact upload steps must use `continue-on-error: true` so storage quota or service failures do not override a successful validation or block the dependent Unity job. Validation, preflight, and cleanup failures remain blocking. Infrastructure fallback JSON must keep the Unity runner schema.
-- Every workflow run depends on the externally provisioned dedicated runner described by `Docs/AI/tools/unity-package-ci-runner.md`; repository code does not create the OS user, install Python, register the runner, activate Unity, or create the token. Plan and static jobs use the runner-provided `python3` instead of `actions/setup-python`, which assumes a writable hosted tool cache on macOS. If the runner is offline or missing a required label, planning and all dependent checks remain queued.
+- Every workflow run depends on the externally provisioned dedicated runner described by `Docs/AI/tools/unity-package-ci-runner.md`; repository code does not create the OS user, install Python, register the runner, activate Unity, or create the token. Plan, AI documentation, and static jobs use the runner-provided `python3` instead of `actions/setup-python`, which assumes a writable hosted tool cache on macOS. If the runner is offline or missing a required label, planning and all dependent checks remain queued.
 
 ## Pull Request Merge Gate Contract
 
 - The stable final status context is `Advisory package validation result`. Manual policy and branch protection must target only this aggregate context, never dynamic matrix job names.
-- The final context is valid only for manual runs and trusted same-repository pull requests that actually reached the dedicated runner. A skipped fork workflow is not successful validation.
+- The final context is valid only for manual runs and trusted same-repository pull requests that actually reached the dedicated runner and passed AI documentation validation. A skipped fork workflow is not successful validation.
 - Installing or applying AI CI workflow assets does not edit repository branch protection or rulesets. Those external settings require a separate, explicit repository-owner decision.
 - When protected branches are unavailable, consuming projects may treat the final context as a manual merge gate: do not merge until it completes successfully.
 - Exit code `1` and static, compiler, EditMode, or Shell failures are package failures owned by the package author. Inspect the package job Step Summary first, then its structured artifact and logs when available. Never bypass a package failure.

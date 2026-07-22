@@ -43,12 +43,12 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
         self.assertNotIn("runs-on: ubuntu-latest", workflow)
         self.assertNotIn("self_hosted_allowed", workflow)
         self.assertNotIn("actions/setup-python", workflow)
-        self.assertEqual(4, workflow.count("runs-on: [self-hosted, macOS, unity-package-ci]"))
+        self.assertEqual(5, workflow.count("runs-on: [self-hosted, macOS, unity-package-ci]"))
         self.assertNotIn("unity-mobile", workflow)
         self.assertIn("persist-credentials: false", workflow)
         self.assertIn("github.event.pull_request.base.sha", workflow)
         self.assertIn("github.event.pull_request.head.sha", workflow)
-        self.assertEqual(4, workflow.count("github.event.pull_request.head.repo.full_name == github.repository"))
+        self.assertEqual(5, workflow.count("github.event.pull_request.head.repo.full_name == github.repository"))
         self.assertIn(
             "plan-validation:\n"
             "    name: Plan package validation\n"
@@ -73,6 +73,15 @@ class GitHubActionsWorkflowTests(unittest.TestCase):
         self.assertIn("advisory-result:\n    name: Advisory package validation result", workflow)
         self.assertEqual(1, workflow.count("name: Advisory package validation result"))
         self.assertIn("if: always()", workflow)
+        self.assertIn("ai-doc-validation:", workflow)
+        self.assertIn("name: AI documentation contract", workflow)
+        self.assertIn("AI_PACKAGE_VERSION_BASE_REF: ${{ needs.plan-validation.outputs.base_ref }}", workflow)
+        self.assertIn("run: python3 Tools/AI/validate_ai_docs.py", workflow)
+        self.assertIn(
+            "needs: [plan-validation, ai-doc-validation, static-validation, unity-validation]",
+            workflow,
+        )
+        self.assertIn("AI_DOC_RESULT: ${{ needs.ai-doc-validation.result }}", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
         self.assertEqual(3, workflow.count("continue-on-error: true"))
         self.assertIn(

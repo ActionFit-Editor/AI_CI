@@ -128,6 +128,27 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  ai-doc-validation:
+    name: AI documentation contract
+    needs: plan-validation
+    if: >-
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository) &&
+      needs.plan-validation.result == 'success'
+    runs-on: [self-hosted, macOS, unity-package-ci]
+    steps:
+      - name: Checkout candidate head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Run AI documentation validation
+        env:
+          AI_PACKAGE_VERSION_BASE_REF: ${{ needs.plan-validation.outputs.base_ref }}
+        run: python3 Tools/AI/validate_ai_docs.py
+
   unity-validation:
     name: Isolated Unity package validation (${{ matrix.package }})
     needs: [plan-validation, static-validation]
@@ -192,7 +213,7 @@ jobs:
       always() &&
       (github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.head.repo.full_name == github.repository)
-    needs: [plan-validation, static-validation, unity-validation]
+    needs: [plan-validation, ai-doc-validation, static-validation, unity-validation]
     runs-on: [self-hosted, macOS, unity-package-ci]
     steps:
       - name: Resolve Advisory result
@@ -201,6 +222,7 @@ jobs:
           PACKAGE_COUNT: ${{ needs.plan-validation.outputs.package_count }}
           STATIC_RESULT: ${{ needs.static-validation.result }}
           UNITY_RESULT: ${{ needs.unity-validation.result }}
+          AI_DOC_RESULT: ${{ needs.ai-doc-validation.result }}
         run: |
           {
             echo "## ActionFit package Advisory"
@@ -209,6 +231,7 @@ jobs:
             printf '%s\n' "- Changed packages: \`${PACKAGE_COUNT:-unknown}\`"
             printf '%s\n' "- Static matrix: \`$STATIC_RESULT\`"
             printf '%s\n' "- Unity matrix: \`$UNITY_RESULT\`"
+            printf '%s\n' "- AI docs: \`$AI_DOC_RESULT\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$PLAN_RESULT" != "success" ]; then
@@ -216,10 +239,14 @@ jobs:
             exit 1
           fi
           if [ "$PACKAGE_COUNT" = "0" ]; then
-            echo "No ActionFit package changes; Advisory validation completed."
+            if [ "$AI_DOC_RESULT" != "success" ]; then
+              echo "AI documentation validation failed or did not complete." >&2
+              exit 1
+            fi
+            echo "No ActionFit package changes; AI documentation validation completed."
             exit 0
           fi
-          if [ "$STATIC_RESULT" != "success" ] || [ "$UNITY_RESULT" != "success" ]; then
+          if [ "$AI_DOC_RESULT" != "success" ] || [ "$STATIC_RESULT" != "success" ] || [ "$UNITY_RESULT" != "success" ]; then
             echo "One or more package validation jobs failed or did not complete." >&2
             exit 1
           fi
