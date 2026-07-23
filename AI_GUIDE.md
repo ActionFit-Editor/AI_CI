@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.20`
+- Current package version at generation time: `1.0.21`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -33,7 +33,7 @@ Read this file when:
 
 ## Main Files
 
-- `Skills~/manifest.json`: schema v2 registration for `package-ci-help`, read-only `package-ci-validate`, and explicit write-capable `package-ci-setup` across Codex and Claude.
+- `Skills~/manifest.json`: schema v2 registration for `package-ci-help`, read-only `package-ci-validate`, and default-context write-capable `package-ci-setup` across Codex and Claude.
 - `Skills~/Codex/` and `Skills~/Claude/`: package-owned skill sources installed project-locally by Custom Package Manager.
 - `Tools~/ai_ci.py`: Unity-independent CLI wrapper that locates and invokes the shared validator.
 - `Tools~/prepare_unity_project.py`: cross-platform dependency closure, minimal Unity project preparation, structured results, and marker-guarded cleanup.
@@ -124,7 +124,7 @@ Read this file when:
 
 ## API And Menu Rules
 
-- `package-ci-validate` may run only the read-only contract validator. `package-ci-setup` must call Preview first, finish without Apply when current, and require separate explicit overwrite approval for every Different target before Apply.
+- `package-ci-validate` may run only the read-only contract validator. `package-ci-setup` is available in the default Codex context, but must call Preview first, finish without Apply when current, and require separate explicit overwrite approval for every Different target before Apply.
 - `AiCiPackageValidationApi` is the public dialog-free API for Unity connectors and editor automation.
 - `AiCiPackageValidationApi.ExecuteJson` returns the shared engine JSON directly, including infrastructure failures.
 - `AiCiWorkflowSetupApi.Preview` is read-only. `Apply` writes only the five fixed package-owned targets and must be called only after explicit overwrite approval for Different files.
