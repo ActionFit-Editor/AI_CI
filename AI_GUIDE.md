@@ -7,7 +7,7 @@ This file is shipped inside the UPM package so an AI assistant in a consuming Un
 - Package ID: `com.actionfit.ai-ci`
 - Display name: AI CI
 - Repository: `https://github.com/ActionFit-Editor/AI_CI.git`
-- Current package version at generation time: `1.0.21`
+- Current package version at generation time: `1.0.22`
 - Unity version: `6000.2`
 
 ## Purpose
@@ -73,7 +73,8 @@ Read this file when:
 
 - `prepare_unity_project.py --package <id> --output <path>` is the shared local and future GitHub Actions preparation command. MCC-1434 runners should import this module or invoke this exact CLI instead of rebuilding dependency closure.
 - The target package must be a physical package under the current worktree `Packages` directory. The generated manifest uses its real `file:` path, including uncommitted changes.
-- Resolve dependencies in this order: physical package under the current worktree `Packages`, exact requested `com.actionfit.*` catalog version as `<repo_url>#<version>`, then the declared Unity Registry version for non-ActionFit packages.
+- Resolve dependencies in this order: physical package under the current worktree `Packages`, exact requested `com.actionfit.*` catalog version as `<repo_url>#<version>`, a matching credential-free HTTPS Git source pinned to the consuming project's exact 40-character `Packages/packages-lock.json` hash, then the declared Unity Registry version for non-ActionFit packages.
+- A project Git source override is valid only when the source project's direct manifest entry and lock `version` match, the lock source is `git`, the lock hash is a full commit, and the URL contains no credentials with only an optional non-empty `path` query. Strip any floating fragment and pin the fixture to the lock commit. Reject missing, mismatched, unpinned, local/file, SSH, HTTP, or otherwise unsupported overrides instead of falling back to a registry package with the same ID.
 - Catalog resolution must use an exact package ID and version row and recursively include its `dependencies` field. Missing exact sources return `DEPENDENCY_SOURCE_UNRESOLVED`.
 - Reject local package realpaths outside the current worktree `Packages` directory, version conflicts, non-Registry external values, in-repository output paths outside `Temp/ActionFitAiCi/<fixture>`, and existing output folders.
 - The output contains only fixture-owned `Assets`, `Library`, `Packages/manifest.json`, target `testables`, `ProjectSettings/ProjectVersion.txt`, and `.actionfit-ai-ci-fixture.json` before Unity runs.

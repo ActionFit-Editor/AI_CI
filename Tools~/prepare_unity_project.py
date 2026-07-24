@@ -14,7 +14,7 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Any, Sequence
-from urllib.parse import urldefrag
+from urllib.parse import parse_qsl, urldefrag, urlsplit
 
 from ai_ci import find_repo_root
 
@@ -23,6 +23,7 @@ SCHEMA_VERSION = "1.0"
 TOOL_NAME = "actionfit-ai-ci-unity-project"
 MARKER_FILE = ".actionfit-ai-ci-fixture.json"
 PACKAGE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+GIT_COMMIT_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
 DEFAULT_CATALOG_PATHS = (
     Path("Assets/_Data/_CustomPackageManager/package_catalog.csv"),
     Path("Packages/com.actionfit.custompackagemanager/Editor/Catalog/package_catalog.csv"),
@@ -178,11 +179,86 @@ def registry_version(value: str, package_id: str) -> str:
     return value
 
 
+def read_optional_dependencies(path: Path, code: str) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    document = read_json(path, code)
+    dependencies = document.get("dependencies") or {}
+    if not isinstance(dependencies, dict):
+        raise PreparationError(code, f"Expected a dependencies object in {path}.", str(path))
+    return dependencies
+
+
+def pinned_project_git_source(
+    package_id: str,
+    source: str,
+    lock_entry: Any,
+    manifest_path: Path,
+    lock_path: Path,
+) -> str:
+    if any(character.isspace() or ord(character) < 32 for character in source):
+        raise PreparationError(
+            "DEPENDENCY_SOURCE_UNRESOLVED",
+            f"Project Git source for {package_id} contains whitespace or control characters.",
+            str(manifest_path),
+        )
+
+    parsed = urlsplit(source)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or not parsed.path.lower().endswith(".git")
+        or any(key != "path" or not value for key, value in query)
+        or len(query) > 1
+    ):
+        raise PreparationError(
+            "DEPENDENCY_SOURCE_UNRESOLVED",
+            f"Project dependency {package_id} must use a credential-free HTTPS Git URL with only an optional path query.",
+            str(manifest_path),
+        )
+
+    if not isinstance(lock_entry, dict):
+        raise PreparationError(
+            "DEPENDENCY_SOURCE_UNRESOLVED",
+            f"Project Git dependency {package_id} has no matching packages-lock entry.",
+            str(lock_path),
+        )
+
+    locked_source = lock_entry.get("version")
+    commit_hash = lock_entry.get("hash")
+    if (
+        lock_entry.get("source") != "git"
+        or locked_source != source
+        or not isinstance(commit_hash, str)
+        or not GIT_COMMIT_PATTERN.fullmatch(commit_hash)
+    ):
+        raise PreparationError(
+            "DEPENDENCY_SOURCE_UNRESOLVED",
+            f"Project Git dependency {package_id} is not pinned by a matching 40-character packages-lock hash.",
+            str(lock_path),
+        )
+
+    return f"{urldefrag(source).url}#{commit_hash.lower()}"
+
+
 class DependencyResolver:
     def __init__(self, repo_root: Path, catalog_path: Path | None) -> None:
         self.repo_root = repo_root.resolve()
         self.catalog_path = catalog_path
         self.catalog = load_catalog(catalog_path)
+        self.project_manifest_path = self.repo_root / "Packages/manifest.json"
+        self.project_lock_path = self.repo_root / "Packages/packages-lock.json"
+        self.project_dependencies = read_optional_dependencies(
+            self.project_manifest_path,
+            "SOURCE_MANIFEST_INVALID",
+        )
+        self.project_lock = read_optional_dependencies(
+            self.project_lock_path,
+            "SOURCE_LOCK_INVALID",
+        )
         self.sources: dict[str, str] = {}
         self.requests: dict[str, str] = {}
         self._resolving: set[str] = set()
@@ -220,7 +296,29 @@ class DependencyResolver:
         if package_id.startswith("com.actionfit."):
             self._add_catalog(package_id, requested_version, owner)
             return
-        self.sources[package_id] = registry_version(requested_version, package_id)
+        registry_source = registry_version(requested_version, package_id)
+        project_source = self.project_dependencies.get(package_id)
+        if project_source is None or project_source == requested_version:
+            self.sources[package_id] = registry_source
+            return
+        if not isinstance(project_source, str):
+            raise PreparationError(
+                "DEPENDENCY_SOURCE_UNRESOLVED",
+                f"Project dependency source for {package_id} must be a string.",
+                str(self.project_manifest_path),
+            )
+        project_source = project_source.strip()
+        source_prefixes = ("file:", "git:", "git+", "http:", "https:", "ssh:", "git@")
+        if not project_source.lower().startswith(source_prefixes):
+            self.sources[package_id] = registry_source
+            return
+        self.sources[package_id] = pinned_project_git_source(
+            package_id,
+            project_source,
+            self.project_lock.get(package_id),
+            self.project_manifest_path,
+            self.project_lock_path,
+        )
 
     def _add_local(self, package_id: str, package_path: Path, owner: str) -> None:
         if package_id in self._resolving:

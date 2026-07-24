@@ -7,7 +7,7 @@ AI CI는 로컬 Unity 프로젝트에서 AI 문서와 ActionFit 패키지 계약
 ```json
 {
   "dependencies": {
-    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.21"
+    "com.actionfit.ai-ci": "https://github.com/ActionFit-Editor/AI_CI.git#1.0.22"
   }
 }
 ```
@@ -72,7 +72,8 @@ Generator 동작:
 
 - target과 사용할 수 있는 local 의존성을 `file:` URL로 참조하므로 현재 worktree 및 commit하지 않은 패키지 변경을 직접 사용합니다.
 - 나머지 `com.actionfit.*` 의존성은 `Assets/_Data/_CustomPackageManager/package_catalog.csv`에 요청된 정확한 버전으로 해석합니다.
-- ActionFit이 아닌 의존성은 선언된 Unity Registry 버전을 유지합니다.
+- ActionFit이 아닌 의존성은 기본적으로 선언된 Unity Registry 버전을 유지합니다.
+- 소비 프로젝트가 같은 dependency ID를 credential 없는 HTTPS Git URL로 직접 고정한 경우, `Packages/packages-lock.json`의 일치하는 full commit hash를 사용합니다. manifest/lock source가 다르거나 lock hash가 없으면 registry로 조용히 대체하지 않고 fixture 준비를 중단합니다.
 - 새 output 폴더 아래에 빈 `Assets`, fixture 소유 `Library`, 최소 `Packages/manifest.json`, target `testables`, `ProjectSettings/ProjectVersion.txt`만 씁니다.
 - 현재 worktree `Packages` 디렉터리 밖의 package realpath를 거부하고 저장소 내부 fixture를 `Temp/ActionFitAiCi` 하위로 제한하며 기존 output 폴더를 덮어쓰지 않습니다.
 

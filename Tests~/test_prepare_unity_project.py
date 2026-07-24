@@ -84,7 +84,10 @@ class PrepareUnityProjectTests(unittest.TestCase):
 
     def test_prepare_uses_local_packages_and_registry_versions(self) -> None:
         source_manifest = self.repo / "Packages/manifest.json"
-        source_manifest.write_text('{"dependencies":{"keep":"1.0.0"}}\n', encoding="utf-8")
+        source_manifest.write_text(
+            '{"dependencies":{"com.unity.nuget.newtonsoft-json":"3.2.2","keep":"1.0.0"}}\n',
+            encoding="utf-8",
+        )
         source_library = self.repo / "Library"
         source_library.mkdir()
         (source_library / "keep.txt").write_text("keep", encoding="utf-8")
@@ -110,7 +113,10 @@ class PrepareUnityProjectTests(unittest.TestCase):
         self.assertTrue((output / "Assets").is_dir())
         self.assertTrue((output / "Library").is_dir())
         self.assertIn("6000.2.6f2 (4a4dcaec6541)", (output / "ProjectSettings/ProjectVersion.txt").read_text())
-        self.assertEqual('{"dependencies":{"keep":"1.0.0"}}\n', source_manifest.read_text(encoding="utf-8"))
+        self.assertEqual(
+            '{"dependencies":{"com.unity.nuget.newtonsoft-json":"3.2.2","keep":"1.0.0"}}\n',
+            source_manifest.read_text(encoding="utf-8"),
+        )
         self.assertEqual("keep", (source_library / "keep.txt").read_text(encoding="utf-8"))
 
     def test_catalog_resolves_exact_git_url_and_transitive_dependencies(self) -> None:
@@ -139,6 +145,72 @@ class PrepareUnityProjectTests(unittest.TestCase):
         self.assertEqual("https://github.com/ActionFit/Remote.git#2.3.4", dependencies["com.actionfit.remote"])
         self.assertEqual("https://github.com/ActionFit/Leaf.git#1.2.0", dependencies["com.actionfit.leaf"])
         self.assertEqual("1.0.0", dependencies["com.unity.modules.jsonserialize"])
+
+    def test_external_dependency_uses_project_git_source_and_lock_hash(self) -> None:
+        package_id = "com.example.git-package"
+        source = "https://github.com/example/package.git?path=Packages/Runtime#main"
+        commit_hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+        self.write_package("com.actionfit.target", "1.0.0", {package_id: "2.5.10"})
+        (self.repo / "Packages/manifest.json").write_text(
+            json.dumps({"dependencies": {package_id: source}}),
+            encoding="utf-8",
+        )
+        (self.repo / "Packages/packages-lock.json").write_text(
+            json.dumps(
+                {
+                    "dependencies": {
+                        package_id: {
+                            "version": source,
+                            "depth": 0,
+                            "source": "git",
+                            "dependencies": {},
+                            "hash": commit_hash,
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "fixture"
+
+        PREPARE.prepare_project(self.repo, "com.actionfit.target", output)
+
+        dependencies = json.loads((output / "Packages/manifest.json").read_text())["dependencies"]
+        self.assertEqual(
+            "https://github.com/example/package.git?path=Packages/Runtime#abcdef0123456789abcdef0123456789abcdef01",
+            dependencies[package_id],
+        )
+
+    def test_external_project_git_source_requires_matching_lock_hash(self) -> None:
+        package_id = "com.example.git-package"
+        source = "https://github.com/example/package.git"
+        self.write_package("com.actionfit.target", "1.0.0", {package_id: "2.5.10"})
+        (self.repo / "Packages/manifest.json").write_text(
+            json.dumps({"dependencies": {package_id: source}}),
+            encoding="utf-8",
+        )
+        (self.repo / "Packages/packages-lock.json").write_text(
+            json.dumps(
+                {
+                    "dependencies": {
+                        package_id: {
+                            "version": source,
+                            "depth": 0,
+                            "source": "git",
+                            "dependencies": {},
+                            "hash": "not-a-commit",
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(PREPARE.PreparationError) as context:
+            PREPARE.prepare_project(self.repo, "com.actionfit.target", self.root / "fixture")
+
+        self.assertEqual("DEPENDENCY_SOURCE_UNRESOLVED", context.exception.code)
+        self.assertIn("40-character packages-lock hash", str(context.exception))
 
     def test_unresolved_actionfit_dependency_returns_stable_error(self) -> None:
         self.write_package("com.actionfit.target", "1.0.0", {"com.actionfit.missing": "9.9.9"})
